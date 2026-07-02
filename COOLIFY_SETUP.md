@@ -51,7 +51,7 @@ Create each service individually using the configurations below.
 - **Volumes**: `openstatus-libsql-data:/var/lib/sqld`
 - **Health Check**: `curl -f http://localhost:8080`
 
-#### TinyBird (Optional)
+#### TinyBird (Optional — Analytics)
 - **Image**: `tinybirdco/tinybird-local:latest`
 - **Name**: `openstatus-tinybird`
 - **Port**: `7181`
@@ -59,6 +59,11 @@ Create each service individually using the configurations below.
   ```
   COMPATIBILITY_MODE=1
   ```
+
+> **⚠️ After starting the Tinybird container, you must deploy the datasources, pipes, and endpoints.** The container starts empty — no analytics will work until the project is pushed. See the [Tinybird Deployment HOWTO](../docs/tinybird-self-hosted-deployment.md) or run:
+> ```sh
+> ./scripts/tinybird-self-hosted-init.sh
+> ```
 
 ### 2. Core Services
 

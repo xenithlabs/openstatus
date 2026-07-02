@@ -100,13 +100,18 @@ All images are published to `ghcr.io/openstatusHQ/openstatus-*`:
   SQLD_NODE: primary
   ```
 
-#### TinyBird (Optional)
+#### TinyBird (Optional — Analytics)
 - **Image**: `tinybirdco/tinybird-local:latest`
 - **Port**: 7181
 - **Environment Variables**:
   ```yaml
   COMPATIBILITY_MODE: 1
   ```
+
+> **⚠️ After starting the Tinybird container, you must deploy the datasources, pipes, and endpoints.** The container starts empty. Run the [Tinybird Deployment HOWTO](docs/tinybird-self-hosted-deployment.md) or the one-shot init script:
+> ```sh
+> ./scripts/tinybird-self-hosted-init.sh
+> ```
 
 ### 4. Network Configuration
 

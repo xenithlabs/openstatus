@@ -149,6 +149,13 @@ func (s *Server) RegisterRoutes() http.Handler {
 	r.Get("/health", s.healthHandler)
 
 	tinyBirdToken := os.Getenv("TINYBIRD_TOKEN")
+	tinyBirdURL := os.Getenv("TINYBIRD_URL")
+
+	slog.Info("registering routes",
+		"tinybird_url", tinyBirdURL,
+		"tinybird_configured", tinyBirdToken != "",
+		"tinybird_url_fallback", tinyBirdURL == "",
+	)
 
 	httpClient := &http.Client{
 		Timeout: 45 * time.Second,

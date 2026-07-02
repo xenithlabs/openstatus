@@ -1,4 +1,3 @@
-
 SCHEMA >
     `monitorId` Int32 `json:$.monitorId`,
     `region` String `json:$.region`,

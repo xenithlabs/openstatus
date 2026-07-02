@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -32,10 +34,16 @@ type client struct {
 }
 
 func NewClient(httpClient *http.Client, apiKey string) Client {
+	baseURL := getBaseURL()
+	slog.Info("tinybird client initialized",
+		"base_url", baseURL,
+		"has_token", apiKey != "",
+		"token_len", len(apiKey),
+	)
 	return client{
 		httpClient: httpClient,
 		apiKey:     apiKey,
-		baseURL:    getBaseURL(),
+		baseURL:    baseURL,
 	}
 }
 
@@ -71,7 +79,20 @@ func (c client) SendEvent(ctx context.Context, event any, dataSourceName string)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusAccepted {
-		log.Ctx(ctx).Error().Str("status", resp.Status).Msg("unexpected status code")
+		bodyBytes, readErr := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		bodyStr := ""
+		if readErr == nil && len(bodyBytes) > 0 {
+			bodyStr = string(bodyBytes)
+		}
+		log.Ctx(ctx).Error().
+			Str("status", resp.Status).
+			Str("url", requestURL.String()).
+			Str("datasource", dataSourceName).
+			Str("response_body", bodyStr).
+			Msg("tinybird returned non-202 status")
+		if bodyStr != "" {
+			return fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, bodyStr)
+		}
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 

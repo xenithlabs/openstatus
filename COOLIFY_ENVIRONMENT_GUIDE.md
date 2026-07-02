@@ -44,6 +44,11 @@ TINY_BIRD_API_KEY=your_tinybird_api_key
 TINYBIRD_URL=http://tinybird:7181
 ```
 
+> **⚠️ Setting these variables alone is not enough.** The Tinybird container starts empty — you must deploy the 55 datasources, 45 pipes, and 107 endpoints. See the [Tinybird Deployment HOWTO](docs/tinybird-self-hosted-deployment.md) or run:
+> ```sh
+> ./scripts/tinybird-self-hosted-init.sh
+> ```
+
 ### **OAuth Providers**
 ```bash
 # GitHub OAuth
