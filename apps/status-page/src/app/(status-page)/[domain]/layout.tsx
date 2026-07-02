@@ -26,11 +26,24 @@ export default async function Layout({
 }) {
   const queryClient = getQueryClient();
   const { domain } = await params;
+
+  const ts = Date.now();
+  console.log(`[status-page] domain="${domain}" looking up status page...`);
+
   const page = await queryClient.fetchQuery(
     trpc.statusPage.get.queryOptions({ slug: domain }),
   );
 
-  if (!page) return notFound();
+  console.log(
+    `[status-page] domain="${domain}" result=${page ? "found" : "NOT_FOUND"} elapsed=${Date.now() - ts}ms`,
+  );
+
+  if (!page) {
+    console.log(
+      `[status-page] domain="${domain}" not found — returning 404`,
+    );
+    return notFound();
+  }
 
   // safeParse + fallback so a stale enum value in stored config (e.g. removed
   // theme key) doesn't crash the layout.
@@ -93,11 +106,17 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const queryClient = getQueryClient();
   const { domain } = await params;
+
+  console.log(`[status-page] generateMetadata domain="${domain}"`);
+
   const page = await queryClient.fetchQuery(
     trpc.statusPage.get.queryOptions({ slug: domain }),
   );
 
-  if (!page) return notFound();
+  if (!page) {
+    console.log(`[status-page] generateMetadata domain="${domain}" page not found`);
+    return defaultMetadata;
+  }
 
   return {
     ...defaultMetadata,

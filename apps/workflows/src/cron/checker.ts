@@ -25,16 +25,12 @@ import {
   pageComponent,
 } from "@openstatus/db/src/schema/page_components";
 import { regionDict } from "@openstatus/regions";
-import {
-  type DNSPayloadSchema,
-  type httpPayloadSchema,
-  type tpcPayloadSchema,
-  transformHeaders,
-} from "@openstatus/utils";
+
 import { Effect, Either, Schedule } from "effect";
 import { z } from "zod";
 
 import { env } from "../env";
+import { hasGCPConfig, getCheckerUrl, buildCheckerPayload } from "@openstatus/utils";
 import { db } from "../lib/db";
 
 type TaskInput = {
@@ -178,6 +174,11 @@ export async function sendCheckerTasks(
     }
   }
 
+  // Self-hosted path: dispatch directly to checker via HTTP
+  if (!hasGCPConfig(env())) {
+    return sendCheckerTasksDirect(taskInputs, periodicity);
+  }
+
   const results = await Effect.runPromise(
     Effect.forEach(
       taskInputs,
@@ -235,87 +236,75 @@ export async function sendCheckerTasks(
 
   return { success, failed };
 }
+async function sendCheckerTasksDirect(
+  taskInputs: TaskInput[],
+  periodicity: string,
+): Promise<{ success: number; failed: number }> {
+  const checkerUrl = getCheckerUrl(env());
+  const results = await Effect.runPromise(
+    Effect.forEach(
+      taskInputs,
+      (input) =>
+        Effect.tryPromise({
+          try: async () => {
+            const payload = buildCheckerPayload(input);
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 30_000);
+            try {
+              const res = await fetch(
+                `${checkerUrl}/checker/${input.row.jobType}`,
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Basic ${env().CRON_SECRET}`,
+                  },
+                  body: JSON.stringify(payload),
+                  signal: controller.signal,
+                },
+              );
+              if (!res.ok) {
+                throw new Error(
+                  `Checker returned ${res.status} for monitor ${input.row.id}`,
+                );
+              }
+            } finally {
+              clearTimeout(timeout);
+            }
+          },
+          catch: (err) =>
+            new Error(
+              `Failed dispatching monitor ${input.row.id} in region ${input.region}: ${err instanceof Error ? err.message : String(err)}`,
+            ),
+        }).pipe(
+          Effect.retry({
+            times: 3,
+            schedule: Schedule.exponential("1000 millis"),
+          }),
+          Effect.either,
+        ),
+      { concurrency: 50 },
+    ),
+  );
+
+  const success = results.filter(Either.isRight).length;
+  const failed = results.filter(Either.isLeft).length;
+
+  logger.info("Completed direct cron job", {
+    periodicity,
+    total_tasks: taskInputs.length,
+    success_count: success,
+    failed_count: failed,
+  });
+
+  return { success, failed };
+}
 // timestamp needs to be in ms
 const createCronTask = async (
   { row, timestamp, status, region }: TaskInput,
   parent: string,
 ) => {
-  let payload:
-    | z.infer<typeof httpPayloadSchema>
-    | z.infer<typeof tpcPayloadSchema>
-    | z.infer<typeof DNSPayloadSchema>
-    | null = null;
-
-  //
-  if (row.jobType === "http") {
-    payload = {
-      workspaceId: String(row.workspaceId),
-      monitorId: String(row.id),
-      url: row.url,
-      method: row.method || "GET",
-      cronTimestamp: timestamp,
-      body: row.body,
-      headers: row.headers,
-      status: status,
-      assertions: row.assertions ? JSON.parse(row.assertions) : null,
-      degradedAfter: row.degradedAfter,
-      timeout: row.timeout,
-      trigger: "cron",
-      otelConfig: row.otelEndpoint
-        ? {
-            endpoint: row.otelEndpoint,
-            headers: transformHeaders(row.otelHeaders),
-          }
-        : undefined,
-      retry: row.retry || 3,
-      followRedirects:
-        row.followRedirects === null ? true : row.followRedirects,
-    };
-  }
-  if (row.jobType === "tcp") {
-    payload = {
-      workspaceId: String(row.workspaceId),
-      monitorId: String(row.id),
-      uri: row.url,
-      status: status,
-      assertions: row.assertions ? JSON.parse(row.assertions) : null,
-      cronTimestamp: timestamp,
-      degradedAfter: row.degradedAfter,
-      timeout: row.timeout,
-      trigger: "cron",
-      retry: row.retry || 3,
-      otelConfig: row.otelEndpoint
-        ? {
-            endpoint: row.otelEndpoint,
-            headers: transformHeaders(row.otelHeaders),
-          }
-        : undefined,
-    };
-  }
-  if (row.jobType === "dns") {
-    payload = {
-      workspaceId: String(row.workspaceId),
-      monitorId: String(row.id),
-      uri: row.url,
-      cronTimestamp: timestamp,
-      status: status,
-      assertions: row.assertions ? JSON.parse(row.assertions) : null,
-      degradedAfter: row.degradedAfter,
-      timeout: row.timeout,
-      trigger: "cron",
-      otelConfig: row.otelEndpoint
-        ? {
-            endpoint: row.otelEndpoint,
-            headers: transformHeaders(row.otelHeaders),
-          }
-        : undefined,
-      retry: row.retry || 3,
-    };
-  }
-
-  if (!payload) {
-    throw new Error("Invalid jobType");
-  }
+  const payload = buildCheckerPayload({ row, timestamp, status, region });
   const regionInfo = regionDict[region];
   let regionHeader = {};
   if (regionInfo.provider === "fly") {

@@ -1,9 +1,14 @@
 import type { NextRequest } from "next/server";
 
-// Custom-domain lookups exact-match page.customDomain, which is stored without a
-// port; an inbound host like "status.acme.com:8080" must be normalized first.
-export const stripHostPort = (host?: string | null) =>
-  host ? host.replace(/:\d+$/, "") : (host ?? null);
+// Custom-domain lookups exact-match page.customDomain. Standard production
+// domains are stored without a port, so strip it. Localhost-family hosts include
+// the port in the stored customDomain (e.g. "localhost:3003"), so preserve it.
+export const stripHostPort = (host?: string | null) => {
+  if (!host) return null;
+  // Preserve port for localhost-family hosts — the stored customDomain includes it.
+  if (/(^|\.)localhost(:\d+)?$/i.test(host)) return host;
+  return host.replace(/:\d+$/, "");
+};
 
 export const getValidSubdomain = (host?: string | null) => {
   let subdomain: string | null = null;
@@ -87,4 +92,18 @@ export const getValidCustomDomain = (req: NextRequest | Request) => {
   console.log({ type, prefix });
 
   return { type, prefix };
+};
+
+/**
+ * Returns true only when the request is hitting a SaaS subdomain
+ * ({slug}.stpg.dev or {slug}.openstatus.dev) AND we are not in self-hosted mode.
+ * In self-hosted mode, always returns false — there is no SaaS subdomain infrastructure.
+ */
+export const isSaasSubdomain = (
+  host: string | null,
+  slug: string,
+): boolean => {
+  if (process.env.SELF_HOST === "true") return false;
+  if (!host) return false;
+  return host === `${slug}.stpg.dev` || host === `${slug}.openstatus.dev`;
 };

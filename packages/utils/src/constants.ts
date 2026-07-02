@@ -11,6 +11,7 @@ export const MONITOR_METHODS = [
 ] as const;
 
 export const MONITOR_STATUSES = ["active", "error", "degraded"] as const;
+export type MonitorStatus = (typeof MONITOR_STATUSES)[number];
 
 export const MONITOR_JOB_TYPES = [
   "http",

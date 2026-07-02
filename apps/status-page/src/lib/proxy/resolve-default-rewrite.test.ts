@@ -28,6 +28,7 @@ describe("resolveDefaultRewrite", () => {
         pathname: "/acme/en",
         search: "",
         requestUrl: "http://localhost:3000/acme/en",
+        origin: "http://localhost:3000",
       }),
     ).toBeNull();
   });
@@ -39,6 +40,7 @@ describe("resolveDefaultRewrite", () => {
       pathname: "/",
       search: "",
       requestUrl: "http://acme.localhost:3000/",
+      origin: "http://acme.localhost:3000",
     });
     expect(action?.type).toBe("rewrite");
     expect(action?.reason).toBe("default-rewrite");
@@ -52,6 +54,7 @@ describe("resolveDefaultRewrite", () => {
       pathname: "/acme/en",
       search: "",
       requestUrl: "https://openstatus.dev/acme/en",
+      origin: "https://openstatus.dev",
     });
     expect(action?.reason).toBe("default-rewrite");
     expect(action?.url?.pathname).toBe("/acme/en");
@@ -64,6 +67,7 @@ describe("resolveDefaultRewrite", () => {
       pathname: "/",
       search: "",
       requestUrl: "https://openstatus.dev/",
+      origin: "https://openstatus.dev",
     });
     expect(action?.url?.pathname).toBe("/acme/en");
   });
@@ -75,6 +79,7 @@ describe("resolveDefaultRewrite", () => {
       pathname: "/",
       search: "?foo=bar",
       requestUrl: "http://acme.localhost:3000/",
+      origin: "http://acme.localhost:3000",
     });
     expect(action?.url?.search).toBe("?foo=bar");
   });
@@ -87,6 +92,7 @@ describe("resolveDefaultRewrite", () => {
         pathname: "/acme/en",
         search: "",
         requestUrl: "http://localhost:3000/acme/en",
+        origin: "http://localhost:3000",
       }),
     ).toBeNull();
   });
@@ -98,6 +104,7 @@ describe("resolveDefaultRewrite", () => {
       pathname: "/acme/en",
       search: "",
       requestUrl: "https://www.openstatus.dev/docs/acme/en",
+      origin: "https://www.openstatus.dev",
     });
     expect(action?.reason).toBe("default-rewrite");
   });

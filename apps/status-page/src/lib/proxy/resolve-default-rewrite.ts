@@ -2,7 +2,7 @@ import type { Action, ComposeInput } from "./types";
 
 type Input = Pick<
   ComposeInput,
-  "route" | "host" | "pathname" | "search" | "requestUrl"
+  "route" | "host" | "pathname" | "search" | "requestUrl" | "origin"
 >;
 
 /**
@@ -19,9 +19,35 @@ export function resolveDefaultRewrite({
   pathname,
   search,
   requestUrl,
+  origin,
 }: Input): Action | null {
   const isOpenstatusDevHost = !!host?.includes("openstatus.dev");
   const pathDiffers = route.rewritePath !== pathname;
+
+  console.log("[proxy] resolveDefaultRewrite", {
+    rewritePath: route.rewritePath,
+    pathname,
+    pathDiffers,
+    requestUrl,
+    origin,
+    isSelfHosted: process.env.SELF_HOST === "true",
+  });
+
+  // Self-hosted mode: always rewrite when the resolved path differs from the URL.
+  // There is no openstatus.dev host to gate on, so we rely solely on pathDiffers.
+  if (process.env.SELF_HOST === "true" && pathDiffers) {
+    // Use origin (req.nextUrl.origin) instead of requestUrl (req.url) so the
+    // rewrite stays same-origin. requestUrl can carry a different port in
+    // Docker standalone mode, which forces NextResponse.rewrite into an
+    // external proxy that fails inside the container.
+    const url = new URL(route.rewritePath, origin);
+    url.search = search;
+    return {
+      type: "rewrite",
+      url,
+      reason: "default-rewrite-self-host",
+    };
+  }
 
   if (!isOpenstatusDevHost && !pathDiffers) return null;
 

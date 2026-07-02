@@ -22,6 +22,13 @@ export default auth(async (req) => {
   passthroughResponse.headers.set("Vary", "Accept");
   const host = req.headers.get("x-forwarded-host");
 
+  // In Docker standalone mode, Next.js may construct req.nextUrl with a wrong
+  // port (picked up from NEXT_PUBLIC_URL / NEXTAUTH_URL env vars). Derive the
+  // real origin from the x-forwarded-host header which carries the actual
+  // external host:port the browser used.
+  const proto = req.headers.get("x-forwarded-proto") || "http";
+  const origin = host ? `${proto}://${host}` : req.nextUrl.origin;
+
   // Strip a `.md` suffix before route resolution so path-based markdown
   // (`/foo/en/monitors/123.md`) parses slug/locale correctly.
   const { wantsMarkdown, source, pathname } = detectMarkdown({
@@ -36,6 +43,7 @@ export default auth(async (req) => {
   });
 
   if (!initialRoute) {
+    console.log("[proxy] no route resolved — passthrough", { host, pathname });
     return passthroughResponse;
   }
 
@@ -64,6 +72,11 @@ export default auth(async (req) => {
   const validation = selectPageSchema.safeParse(query);
 
   if (!validation.success) {
+    console.log("[proxy] page not found in DB — passthrough", {
+      prefix: initialRoute.prefix,
+      pathname,
+      queryResult: query ? "row exists, schema mismatch" : "no rows",
+    });
     return passthroughResponse;
   }
 
@@ -84,6 +97,16 @@ export default auth(async (req) => {
     isSelfHosted,
   });
 
+  console.log("[proxy] url-resolution", {
+    "req.url": req.url,
+    "req.nextUrl.origin": req.nextUrl.origin,
+    "req.nextUrl.host": req.nextUrl.host,
+    "req.nextUrl.port": req.nextUrl.port,
+    "url.host": url.host,
+    "url.pathname": url.pathname,
+    origin,
+  });
+
   const action = composePageAction({
     route,
     page: _page,
@@ -93,7 +116,7 @@ export default auth(async (req) => {
     search: url.search,
     isSelfHosted,
     requestUrl: req.url,
-    origin: req.nextUrl.origin,
+    origin,
     cookiePassword: req.cookies.get(createProtectedCookieKey(_page.slug))
       ?.value,
     queryPassword: url.searchParams.get("pw"),
@@ -114,7 +137,20 @@ export default auth(async (req) => {
     case "rewrite": {
       // HTML served via internal rewrite shares its URL with the markdown
       // variant — carry the same Vary so caches don't cross them.
-      const rewriteResponse = NextResponse.rewrite(action.url);
+      // Self-hosted: rewrite must target the container's internal port
+      // (process.env.PORT or 3000) so Next.js treats it as same-origin.
+      // Any other origin triggers an external HTTP proxy which fails when
+      // the port is host-mapped (e.g. Docker :3003→:3000).
+      const rewriteTarget = isSelfHosted
+        ? (() => {
+            const u = req.nextUrl.clone();
+            u.pathname = action.url.pathname;
+            u.port = process.env.PORT || "3000";
+            u.host = `localhost:${u.port}`;
+            return u;
+          })()
+        : action.url;
+      const rewriteResponse = NextResponse.rewrite(rewriteTarget);
       rewriteResponse.headers.set("Vary", "Accept");
       return rewriteResponse;
     }

@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 
+import { resolveProtocol } from "./base-url";
+
 function host({
   slug,
   customDomain,
@@ -8,7 +10,7 @@ function host({
   customDomain?: string | null;
 }) {
   return customDomain
-    ? `https://${customDomain}`
+    ? `${resolveProtocol(customDomain)}${customDomain}`
     : `https://${slug}.openstatus.dev`;
 }
 

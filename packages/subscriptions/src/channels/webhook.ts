@@ -31,9 +31,16 @@ function redactWebhookUrl(url: string): string {
 }
 
 function resolveStatusPageOrigin(subscription: Subscription): string {
-  return subscription.customDomain
-    ? `https://${subscription.customDomain}`
-    : `https://${subscription.pageSlug}.openstatus.dev`;
+  if (subscription.customDomain) {
+    const protocol =
+      subscription.customDomain.includes("localhost") ||
+      subscription.customDomain.startsWith("127.") ||
+      subscription.customDomain.startsWith("[::1]")
+        ? "http://"
+        : "https://";
+    return `${protocol}${subscription.customDomain}`;
+  }
+  return `https://${subscription.pageSlug}.openstatus.dev`;
 }
 
 // Deep link to the specific event on the status page, mirroring the path

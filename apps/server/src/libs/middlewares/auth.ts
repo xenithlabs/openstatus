@@ -196,25 +196,27 @@ export async function validateKey(key: string): Promise<{
       // keys predate the scopes column, so they carry the legacy
       // posture (`write`). When/if Unkey gets RBAC metadata, plumb
       // it in here.
-      const unkey = new UnkeyCore({ rootKey: env.UNKEY_TOKEN });
-      const res = await keysVerifyKey(unkey, { key });
-      if (!res.ok) {
-        logger.error("Unkey Error {*}", { ...res.error });
+      if (env.UNKEY_TOKEN) {
+        const unkey = new UnkeyCore({ rootKey: env.UNKEY_TOKEN });
+        const res = await keysVerifyKey(unkey, { key });
+        if (!res.ok) {
+          logger.error("Unkey Error {*}", { ...res.error });
+          return {
+            result: { valid: false, ownerId: undefined },
+            error: { message: "Invalid API verification" },
+          };
+        }
         return {
-          result: { valid: false, ownerId: undefined },
-          error: { message: "Invalid API verification" },
+          result: {
+            valid: res.value.data.valid,
+            ownerId: res.value.data.identity?.externalId,
+            authMethod: "unkey",
+            keyId: res.value.data.keyId,
+            scopes: ["write"],
+          },
+          error: undefined,
         };
       }
-      return {
-        result: {
-          valid: res.value.data.valid,
-          ownerId: res.value.data.identity?.externalId,
-          authMethod: "unkey",
-          keyId: res.value.data.keyId,
-          scopes: ["write"],
-        },
-        error: undefined,
-      };
     }
     // Special bypass for our workspace. `'*'` is internal-only — never
     // settable via any public API.

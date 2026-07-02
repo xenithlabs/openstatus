@@ -1,6 +1,6 @@
 import type { Page } from "@openstatus/db/src/schema";
 
-import { getValidSubdomain } from "../domain";
+import { getValidSubdomain, isSaasSubdomain } from "../domain";
 import type { Action, ComposeInput } from "./types";
 
 type Input = Pick<
@@ -34,7 +34,7 @@ export function resolveCustomDomainRewrite({
 }: Input): Action | null {
   if (isSelfHosted) return null;
   if (!page.customDomain) return null;
-  if (host === `${page.slug}.stpg.dev`) return null;
+  if (isSaasSubdomain(host, page.slug)) return null;
 
   const pathnames = pathname.split("/");
   const subdomain = getValidSubdomain(urlHost);

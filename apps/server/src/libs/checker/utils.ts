@@ -4,6 +4,8 @@ import {
   type httpPayloadSchema,
   type tpcPayloadSchema,
   transformHeaders,
+  isSelfHost,
+  getCheckerUrl as getSelfHostCheckerUrl,
 } from "@openstatus/utils";
 
 import { OpenStatusApiError } from "@/libs/errors";
@@ -73,11 +75,15 @@ export function getCheckerUrl(
     data: false,
   },
 ): string {
+  const base = isSelfHost()
+    ? getSelfHostCheckerUrl(process.env as { CHECKER_URL: string })
+    : "https://openstatus-checker.fly.dev";
+
   switch (monitor.jobType) {
     case "http":
-      return `https://openstatus-checker.fly.dev/checker/http?monitor_id=${monitor.id}&trigger=${opts.trigger}&data=${opts.data}`;
+      return `${base}/checker/http?monitor_id=${monitor.id}&trigger=${opts.trigger}&data=${opts.data}`;
     case "tcp":
-      return `https://openstatus-checker.fly.dev/checker/tcp?monitor_id=${monitor.id}&trigger=${opts.trigger}&data=${opts.data}`;
+      return `${base}/checker/tcp?monitor_id=${monitor.id}&trigger=${opts.trigger}&data=${opts.data}`;
     default:
       throw new OpenStatusApiError({
         code: "BAD_REQUEST",

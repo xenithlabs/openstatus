@@ -11,6 +11,11 @@ import type { checkApi } from "../index";
 
 const logger = getLogger("api-server");
 import {
+  getCheckerUrl,
+  getCheckerRegion,
+  isSelfHost,
+} from "@openstatus/utils";
+import {
   AggregatedResponseSchema,
   AggregatedResult,
   CheckPostResponseSchema,
@@ -70,11 +75,15 @@ export function registerHTTPPostCheck(api: typeof checkApi) {
     for (let count = 0; count < input.runCount; count++) {
       const currentFetch = [];
       for (const region of input.regions) {
-        const r = fetch(`https://openstatus-checker.fly.dev/ping/${region}`, {
+        const targetRegion = getCheckerRegion(region);
+        const targetUrl = isSelfHost()
+          ? `${getCheckerUrl(process.env as { CHECKER_URL: string })}/ping/${targetRegion}`
+          : `https://openstatus-checker.fly.dev/ping/${targetRegion}`;
+        const r = fetch(targetUrl, {
           headers: {
             Authorization: `Basic ${env.CRON_SECRET}`,
             "Content-Type": "application/json",
-            "fly-prefer-region": region,
+            ...(isSelfHost() ? {} : { "fly-prefer-region": targetRegion }),
           },
           method: "POST",
           body: JSON.stringify({

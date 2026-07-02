@@ -22,6 +22,7 @@ import {
 } from "@openstatus/emails/src/send";
 import { bulkUpdateMonitors } from "@openstatus/services/monitor";
 import { Redis } from "@openstatus/upstash";
+import { hasGCPConfig } from "@openstatus/utils";
 import { RateLimiter } from "limiter";
 import { z } from "zod";
 
@@ -29,24 +30,40 @@ import { env } from "../env";
 
 const redis = Redis.fromEnv();
 
-const client = new CloudTasksClient({
-  projectId: env().GCP_PROJECT_ID,
-  fallback: "rest",
-  credentials: {
-    client_email: env().GCP_CLIENT_EMAIL,
-    private_key: env().GCP_PRIVATE_KEY.replaceAll("\\n", "\n"),
-  },
-});
+// Lazy-init: self-host mode has no GCP creds, so we can't create the client at module level
+let _client: CloudTasksClient | null = null;
+function getCloudTasksClient() {
+  if (!_client) {
+    _client = new CloudTasksClient({
+      projectId: env().GCP_PROJECT_ID,
+      fallback: "rest",
+      credentials: {
+        client_email: env().GCP_CLIENT_EMAIL,
+        private_key: env().GCP_PRIVATE_KEY.replaceAll("\\n", "\n"),
+      },
+    });
+  }
+  return _client;
+}
 
-const parent = client.queuePath(
-  env().GCP_PROJECT_ID,
-  env().GCP_LOCATION,
-  "workflow",
-);
+function getParent() {
+  return getCloudTasksClient().queuePath(
+    env().GCP_PROJECT_ID,
+    env().GCP_LOCATION,
+    "workflow",
+  );
+}
 
 const limiter = new RateLimiter({ tokensPerInterval: 15, interval: "second" });
 
 export async function LaunchMonitorWorkflow() {
+  if (!hasGCPConfig(env())) {
+    console.log(
+      "Skipping monitor lifecycle workflow: Cloud Tasks are unavailable in self-host mode.",
+    );
+    return;
+  }
+
   // Expires is one month after last connection, so if we want to reach people who connected 3 months ago we need to check for people with  expires 2 months ago
   const twoMonthAgo = new Date().setMonth(new Date().getMonth() - 2);
 
@@ -185,8 +202,8 @@ async function workflowInit({
   }
   const initialRun = new Date().getTime();
   await CreateTask({
-    parent,
-    client: client,
+    parent: getParent(),
+    client: getCloudTasksClient(),
     step: "14days",
     userId: user.userId,
     initialRun,
@@ -230,8 +247,8 @@ export async function Step14Days(userId: number, workFlowRunTimestamp: number) {
   }
 
   await CreateTask({
-    parent,
-    client: client,
+    parent: getParent(),
+    client: getCloudTasksClient(),
     step: "3days",
     userId: user.id,
     initialRun: workFlowRunTimestamp,
@@ -271,8 +288,8 @@ export async function Step3Days(userId: number, workFlowRunTimestamp: number) {
   }
 
   await CreateTask({
-    client,
-    parent,
+    client: getCloudTasksClient(),
+    parent: getParent(),
     step: "paused",
     userId,
     initialRun: workFlowRunTimestamp,

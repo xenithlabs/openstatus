@@ -5,7 +5,7 @@ SQL >
     %
     SELECT *
     FROM external_status
-    WHERE name = {{ String(name, 'OpenAI') }}
+    WHERE id = {{ String(id, 'OpenAI') }}
     ORDER BY fetched_at DESC
     LIMIT {{ Int16(limit, 10000) }}
 

@@ -69,3 +69,15 @@ export const DNSPayloadSchema = z.object({
 });
 
 export type DNSPayload = z.infer<typeof DNSPayloadSchema>;
+
+export function transformHeaders(headers: { key: string; value: string }[]) {
+  return headers.length > 0
+    ? headers.reduce(
+        (acc, curr) => {
+          acc[curr.key] = curr.value;
+          return acc;
+        },
+        {} as Record<string, string>,
+      )
+    : {};
+}
