@@ -55,6 +55,14 @@ export const page = sqliteTable(
     legacyPage: integer("legacy_page", { mode: "boolean" })
       .notNull()
       .default(true),
+
+    // True when the page was created with a custom domain instead of a
+    // subdomain. Self-hosted pages skip Vercel registration and display
+    // their custom domain in the dashboard instead of slug.openstatus.dev.
+    selfHosted: integer("self_hosted", { mode: "boolean" })
+      .notNull()
+      .default(false),
+
     configuration: text("configuration", { mode: "json" }),
 
     allowIndex: integer("allow_index", { mode: "boolean" })

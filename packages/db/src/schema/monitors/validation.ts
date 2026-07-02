@@ -39,12 +39,21 @@ const headersToArraySchema = z.preprocess(
   z.array(z.object({ key: z.string(), value: z.string() })).prefault([]),
 );
 
+// Boolean columns (active, public, followRedirects) are stored as integers
+// (0/1) in SQLite. Drizzle maps them via mode: "boolean", but .all() may
+// return raw integers before mapping. Use a preprocessor so the select
+// schema accepts both forms.
+const booleanFromSqlite = z.preprocess(
+  (val) => (typeof val === "number" ? val !== 0 : val),
+  z.boolean(),
+);
+
 export const selectMonitorSchema = createSelectSchema(monitor, {
   periodicity: monitorPeriodicitySchema.prefault("10m"),
   status: monitorStatusSchema.prefault("active"),
   jobType: monitorJobTypesSchema.prefault("http"),
   timeout: z.number().prefault(45),
-  followRedirects: z.boolean().prefault(true),
+  followRedirects: booleanFromSqlite.prefault(true),
   retry: z.number().prefault(3),
   regions: regionsToArraySchema.prefault([]),
 }).extend({

@@ -1,0 +1,1 @@
+ALTER TABLE `page` ADD `self_hosted` integer DEFAULT false NOT NULL;

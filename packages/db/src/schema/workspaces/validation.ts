@@ -9,11 +9,31 @@ import { workspace } from "./workspace";
 export const workspacePlanSchema = z.enum(workspacePlans);
 export const workspaceRoleSchema = z.enum(workspaceRole);
 
+export const emailProviderSchema = z.enum(["resend", "smtp"]);
+export type EmailProvider = z.infer<typeof emailProviderSchema>;
+
+export const emailConfigSchema = z.object({
+  provider: emailProviderSchema.prefault("resend"),
+  smtpHost: z.string().prefault(""),
+  smtpPort: z.coerce.number().int().min(1).max(65535).prefault(587),
+  smtpUser: z.string().prefault(""),
+  smtpPass: z.string().prefault(""),
+  smtpFrom: z.string().prefault(""),
+});
+export type EmailConfig = z.infer<typeof emailConfigSchema>;
+
 /**
  * Workspace schema with limits and plan
  */
 export const selectWorkspaceSchema = createSelectSchema(workspace)
   .extend({
+    emailConfig: z.string().transform((val) => {
+      try {
+        return emailConfigSchema.parse(JSON.parse(val));
+      } catch {
+        return emailConfigSchema.parse({});
+      }
+    }),
     limits: z.string().transform((val) => {
       try {
         const parsed = JSON.parse(val);

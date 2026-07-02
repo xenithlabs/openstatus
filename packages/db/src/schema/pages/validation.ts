@@ -23,7 +23,7 @@ export const slugSchema = z
 export const customDomainSchema = z
   .string()
   .regex(
-    /^(?!https?:\/\/|www.)([a-zA-Z0-9]+(.[a-zA-Z0-9]+)+.*)$/,
+    /^(?!https?:\/\/|www.)(([a-zA-Z0-9-]+\.)*localhost(:\d+)?|([a-zA-Z0-9]+(.[a-zA-Z0-9]+)+.*))$/,
     "Should not start with http://, https:// or www.",
   )
   .or(z.enum([""]));
@@ -40,6 +40,7 @@ export const insertPageSchema = createInsertSchema(page, {
   accessType: z.enum(pageAccessTypes).prefault("public"),
   icon: z.string().optional(),
   slug: slugSchema,
+  selfHosted: z.boolean().prefault(false),
 })
   .extend({
     password: z.string().nullable().optional().prefault(""),
@@ -120,6 +121,7 @@ export const selectPageSchema = createSelectSchema(page).extend({
   allowedIpRanges: stringToArray.prefault([]),
   defaultLocale: z.enum(locales).prefault("en"),
   locales: z.array(z.enum(locales)).nullable().prefault(null),
+  selfHosted: z.boolean().prefault(false),
 });
 
 export type InsertPage = z.infer<typeof insertPageSchema>;

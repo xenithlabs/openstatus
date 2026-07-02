@@ -20,6 +20,8 @@ export const workspace = sqliteTable(
     endsAt: integer("ends_at", { mode: "timestamp" }),
     paidUntil: integer("paid_until", { mode: "timestamp" }),
     limits: text("limits").default("{}").notNull(),
+    // JSON: { provider: "resend"|"smtp", smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom }
+    emailConfig: text("email_config").default("{}").notNull(),
     createdAt: integer("created_at", { mode: "timestamp" }).default(
       sql`(strftime('%s', 'now'))`,
     ),

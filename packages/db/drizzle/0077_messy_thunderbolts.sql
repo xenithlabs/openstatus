@@ -1,0 +1,1 @@
+ALTER TABLE `workspace` ADD `email_config` text DEFAULT '{}' NOT NULL;
