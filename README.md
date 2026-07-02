@@ -115,15 +115,8 @@ pnpm install
 
 3. Initialize the development environment
 
-Launch the database in one terminal:
-
 ```sh
-turso dev --db-file openstatus-dev.db
-```
-
-In another terminal, run the following command:
-
-```sh
+# Starts libSQL (port 8080), Tinybird local, and applies database migrations
 pnpm dx
 ```
 
@@ -135,7 +128,9 @@ pnpm dev:status-page
 pnpm dev:dashboard
 ```
 
-The above commands will automatically run the libSQL client on `8080` so you might want to kill the turso command from step 3.
+> **Note:** `pnpm dx` starts its own libSQL instance on port 8080 via process-compose.
+> If you need a standalone libSQL instance, use `turso dev --port 8081 --db-file openstatus-dev.db`
+> to avoid port conflicts.
 
 5. See the results:
 

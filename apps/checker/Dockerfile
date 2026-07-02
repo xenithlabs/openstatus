@@ -1,4 +1,4 @@
-FROM golang:1.26-alpine as builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /go/src/app
 COPY ca/ca-bundle.crt /usr/local/share/ca-certificates/ca-bundle.crt
@@ -18,23 +18,24 @@ COPY go.* .
 RUN go mod download
 
 COPY . .
-RUN go build -trimpath -ldflags "-s -w" -o checker ./cmd/server/main.go
+RUN go build -trimpath -ldflags "-s -w" -o /tmp/checker ./cmd/server/main.go
 
-FROM scratch
+FROM alpine:3.21
 
 WORKDIR /opt/bin
+
+RUN apk add --no-cache curl
 
 COPY --from=builder /usr/local/share/ca-certificates/ca-bundle.crt /etc/ssl/certs/ca-bundle.crt
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 
-
-
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 
-COPY --from=builder /go/src/app/checker/main /opt/bin/checker
+COPY --from=builder /tmp/checker /opt/bin/checker
 
 ENV TZ=UTC
-ENV USER=1000
 ENV GIN_MODE=release
 
-CMD [ "/opt/bin/checker" ]
+USER 1000:1000
+
+CMD ["/opt/bin/checker"]

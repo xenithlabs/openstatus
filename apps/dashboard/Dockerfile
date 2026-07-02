@@ -7,28 +7,29 @@ FROM node@sha256:0afb7822fac7bf9d7c1bf3b6e6c496dee6b2b64d8dfa365501a3c68e8eba94b
 LABEL \
     org.opencontainers.image.base.digest="sha256:0afb7822fac7bf9d7c1bf3b6e6c496dee6b2b64d8dfa365501a3c68e8eba94b2" \
     org.opencontainers.image.base.name="docker.io/node:24-slim"
-ENV \
+ARG \
     NODE_ENV="production" \
-    TINY_BIRD_API_KEY="test" \
-    OPENPANEL_CLIENT_SECRET="test" \
-    NEXT_PUBLIC_URL="http://localhost:3002" \
-    PROJECT_ID_VERCEL="test" \
-    TEAM_ID_VERCEL="test" \
-    PATH="$PNPM_HOME:$PATH" \
-    DATABASE_AUTH_TOKEN="test" \
-    CRON_SECRET="test" \
+    PNPM_HOME="/pnpm" \
     DATABASE_URL="http://libsql:8080" \
+    DATABASE_AUTH_TOKEN="test" \
+    NEXT_PUBLIC_OPENPANEL_CLIENT_ID="test" \
+    NEXT_PUBLIC_URL="http://localhost:3002" \
+    TEAM_ID_VERCEL="test" \
+    PROJECT_ID_VERCEL="test" \
+    VERCEL_AUTH_BEARER_TOKEN="test" \
+    OPENPANEL_CLIENT_SECRET="test" \
     RESEND_API_KEY="test" \
     UPSTASH_REDIS_REST_URL="https://test.upstash.io" \
-    UNKEY_TOKEN="test" \
-    SELF_HOST="true" \
-    UNKEY_API_ID="test" \
-    STRIPE_SECRET_KEY="test" \
-    NEXT_PUBLIC_OPENPANEL_CLIENT_ID="test" \
-    AUTH_SECRET="build-time-placeholder-min-32-chars-long" \
     UPSTASH_REDIS_REST_TOKEN="test" \
-    VERCEL_AUTH_BEARER_TOKEN="test" \
-    PNPM_HOME="/pnpm"
+    UNKEY_TOKEN="test" \
+    UNKEY_API_ID="test" \
+    TINY_BIRD_API_KEY="" \
+    CRON_SECRET="test" \
+    STRIPE_SECRET_KEY="test" \
+    AUTH_SECRET="build-time-placeholder-min-32-chars-long" \
+    SELF_HOST="true"
+ENV \
+    PATH="$PNPM_HOME:$PATH"
 WORKDIR /app
 COPY \
     --link \

@@ -6,8 +6,12 @@ networks:
 volumes:
     libsql-data:
         name: openstatus-libsql-data
+    redis-data:
+        name: openstatus-redis-data
     workflows-data:
         name: openstatus-workflows-data
+    tinybird-data:
+        name: openstatus-tinybird-data
 
 services:
     # External services
@@ -36,15 +40,18 @@ services:
         restart: unless-stopped
 
     tinybird-local:
-        container_name: openstatus-tinybird
+        container_name: openstatus-tinybird-local
         image: tinybirdco/tinybird-local:latest
         platform: linux/amd64
         networks:
             - openstatus
         ports:
             - "7181:7181"
+            - "8123:8123"
         environment:
             - COMPATIBILITY_MODE=1
+        volumes:
+            - tinybird-data:/var/lib/clickhouse
         healthcheck:
             test: ["CMD", "curl", "-f", "http://localhost:7181/"]
             interval: 15s
@@ -52,6 +59,76 @@ services:
             retries: 5
             start_period: 20s
         restart: unless-stopped
+
+    redis:
+        container_name: openstatus-redis
+        image: redis/redis-stack-server:6.2.6-v6
+        networks:
+            - openstatus
+        ports:
+            - "6379:6379"
+        volumes:
+            - redis-data:/data
+        healthcheck:
+            test: ["CMD", "redis-cli", "ping"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 10s
+        restart: unless-stopped
+
+    redis-http:
+        container_name: openstatus-redis-http
+        image: hiett/serverless-redis-http:latest
+        networks:
+            - openstatus
+        ports:
+            - "8079:80"
+        environment:
+            - SRH_MODE=env
+            - SRH_TOKEN=${UPSTASH_REDIS_REST_TOKEN:-replace-with-a-long-random-secret}
+            - SRH_CONNECTION_STRING=redis://redis:6379
+        depends_on:
+            redis:
+                condition: service_healthy
+        restart: unless-stopped
+
+    db-migrate:
+        container_name: openstatus-db-migrate
+        image: oven/bun:1.3.6
+        networks:
+            - openstatus
+        working_dir: /app/packages/db
+        volumes:
+            - .:/app
+        env_file:
+            - .env.docker
+        environment:
+            - DATABASE_URL=http://libsql:8080
+        command: ["sh", "-c", "bun install && bun run migrate"]
+        depends_on:
+            libsql:
+                condition: service_healthy
+        restart: "no"
+
+    db-seed:
+        container_name: openstatus-db-seed
+        image: oven/bun:1.3.6
+        networks:
+            - openstatus
+        working_dir: /app/packages/db
+        volumes:
+            - .:/app
+        env_file:
+            - .env.docker
+        environment:
+            - DATABASE_URL=http://libsql:8080
+        command: ["sh", "-c", "bun install && bun run seed"]
+        profiles: ["seed"]
+        depends_on:
+            db-migrate:
+                condition: service_completed_successfully
+        restart: "no"
 
     # Internal Services
     workflows:
@@ -69,11 +146,18 @@ services:
         env_file:
             - .env.docker
         environment:
-            - DATABASE_URL=http://libsql:8080
+            - CHECKER_URL=http://checker:8080
+            - OPENSTATUS_WORKFLOWS_URL=http://workflows:3000
+            - UPSTASH_REDIS_REST_URL=http://redis-http:80
+            - UPSTASH_REDIS_REST_TOKEN=${UPSTASH_REDIS_REST_TOKEN:-replace-with-a-long-random-secret}
             - PORT=3000
         depends_on:
+            db-migrate:
+                condition: service_completed_successfully
             libsql:
                 condition: service_healthy
+            redis-http:
+                condition: service_started
         healthcheck:
             test: ["CMD-SHELL", "curl -f http://localhost:3000/ping || exit 1"]
             interval: 15s
@@ -95,19 +179,77 @@ services:
         env_file:
             - .env.docker
         environment:
-            - DATABASE_URL=http://libsql:8080
+            - OPENSTATUS_WORKFLOWS_URL=http://workflows:3000
+            - UPSTASH_REDIS_REST_URL=http://redis-http:80
+            - UPSTASH_REDIS_REST_TOKEN=${UPSTASH_REDIS_REST_TOKEN:-replace-with-a-long-random-secret}
             - PORT=3000
         depends_on:
+            db-migrate:
+                condition: service_completed_successfully
             workflows:
                 condition: service_healthy
             libsql:
                 condition: service_healthy
+            redis-http:
+                condition: service_started
         healthcheck:
             test: ["CMD-SHELL", "curl -f http://localhost:3000/ping || exit 1"]
             interval: 15s
             timeout: 10s
             retries: 3
             start_period: 30s
+        restart: unless-stopped
+
+    checker:
+        container_name: openstatus-checker
+        build:
+            context: apps/checker
+            dockerfile: Dockerfile
+        image: openstatus/checker:latest
+        networks:
+            - openstatus
+        ports:
+            - "8082:8080"
+        env_file:
+            - .env.docker
+        environment:
+            - PORT=8080
+            - CRON_SECRET=${CRON_SECRET:-your-random-cron-secret}
+            - OPENSTATUS_WORKFLOWS_URL=http://workflows:3000
+            - TINYBIRD_TOKEN=${TINY_BIRD_API_KEY:-}
+            - TINYBIRD_URL=${TINYBIRD_URL:-http://tinybird-local:7181}
+            - CLOUD_PROVIDER=fly
+            - FLY_REGION=self-hosted
+        depends_on:
+            workflows:
+                condition: service_healthy
+            tinybird-local:
+                condition: service_healthy
+        healthcheck:
+            test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+            interval: 15s
+            timeout: 10s
+            retries: 3
+            start_period: 30s
+        restart: unless-stopped
+
+    private-probe:
+        container_name: openstatus-private-probe
+        build:
+            context: apps/checker
+            dockerfile: Dockerfile.probe
+        image: openstatus/private-probe:latest
+        networks:
+            - openstatus
+        env_file:
+            - .env.docker
+        environment:
+            - OPENSTATUS_KEY=${PRIVATE_LOCATION_TOKEN:-}
+            - OPENSTATUS_INGEST_URL=http://private-location:8080
+            - LOG_LEVEL=debug
+        depends_on:
+            private-location:
+                condition: service_healthy
         restart: unless-stopped
 
     private-location:
@@ -124,11 +266,17 @@ services:
             - .env.docker
         environment:
             - DB_URL=http://libsql:8080
-            - TINYBIRD_URL=http://tinybird-local:7181
+            - DB_AUTH_TOKEN=
+            - TINYBIRD_TOKEN=${TINY_BIRD_API_KEY:-}
+            - TINYBIRD_URL=${TINYBIRD_URL:-http://tinybird-local:7181}
             - GIN_MODE=release
             - PORT=8080
         depends_on:
-            server:
+            db-migrate:
+                condition: service_completed_successfully
+            libsql:
+                condition: service_healthy
+            tinybird-local:
                 condition: service_healthy
         healthcheck:
             test:
@@ -150,6 +298,27 @@ services:
         build:
             context: .
             dockerfile: apps/dashboard/Dockerfile
+            args:
+                - NODE_ENV=production
+                - PNPM_HOME=/pnpm
+                - DATABASE_URL=http://libsql:8080
+                - DATABASE_AUTH_TOKEN=test
+                - NEXT_PUBLIC_OPENPANEL_CLIENT_ID=test
+                - NEXT_PUBLIC_URL=http://localhost:3002
+                - TEAM_ID_VERCEL=test
+                - PROJECT_ID_VERCEL=test
+                - VERCEL_AUTH_BEARER_TOKEN=test
+                - OPENPANEL_CLIENT_SECRET=test
+                - RESEND_API_KEY=test
+                - UPSTASH_REDIS_REST_URL=https://test.upstash.io
+                - UPSTASH_REDIS_REST_TOKEN=test
+                - UNKEY_TOKEN=test
+                - UNKEY_API_ID=test
+                - TINY_BIRD_API_KEY=
+                - CRON_SECRET=test
+                - STRIPE_SECRET_KEY=test
+                - AUTH_SECRET=${AUTH_SECRET}
+                - SELF_HOST=true
         image: openstatus/dashboard:latest
         networks:
             - openstatus
@@ -158,17 +327,23 @@ services:
         env_file:
             - .env.docker
         environment:
-            - DATABASE_URL=http://libsql:8080
             - PORT=3000
             - HOSTNAME=0.0.0.0
             - AUTH_TRUST_HOST=true
+            - CHECKER_URL=http://checker:8080
+            - UPSTASH_REDIS_REST_URL=http://redis-http:80
+            - UPSTASH_REDIS_REST_TOKEN=${UPSTASH_REDIS_REST_TOKEN:-replace-with-a-long-random-secret}
         depends_on:
+            db-migrate:
+                condition: service_completed_successfully
             workflows:
                 condition: service_healthy
             libsql:
                 condition: service_healthy
             server:
                 condition: service_healthy
+            redis-http:
+                condition: service_started
         healthcheck:
             test: ["CMD-SHELL", "curl -f http://localhost:3000/ || exit 1"]
             interval: 15s
@@ -182,6 +357,26 @@ services:
         build:
             context: .
             dockerfile: apps/status-page/Dockerfile
+            args:
+                - NODE_ENV=production
+                - PNPM_HOME=/pnpm
+                - DATABASE_URL=http://libsql:8080
+                - DATABASE_AUTH_TOKEN=test
+                - NEXT_PUBLIC_OPENPANEL_CLIENT_ID=test
+                - NEXT_PUBLIC_URL=http://localhost:3002
+                - TEAM_ID_VERCEL=test
+                - PROJECT_ID_VERCEL=test
+                - VERCEL_AUTH_BEARER_TOKEN=test
+                - OPENPANEL_CLIENT_SECRET=test
+                - RESEND_API_KEY=test
+                - UPSTASH_REDIS_REST_URL=https://test.upstash.io
+                - UPSTASH_REDIS_REST_TOKEN=test
+                - UNKEY_TOKEN=test
+                - UNKEY_API_ID=test
+                - TINY_BIRD_API_KEY=
+                - CRON_SECRET=test
+                - STRIPE_SECRET_KEY=test
+                - SELF_HOST=true
         image: openstatus/status-page:latest
         networks:
             - openstatus
@@ -190,17 +385,23 @@ services:
         env_file:
             - .env.docker
         environment:
-            - DATABASE_URL=http://libsql:8080
             - PORT=3000
             - HOSTNAME=0.0.0.0
             - AUTH_TRUST_HOST=true
+            - CHECKER_URL=http://checker:8080
+            - UPSTASH_REDIS_REST_URL=http://redis-http:80
+            - UPSTASH_REDIS_REST_TOKEN=${UPSTASH_REDIS_REST_TOKEN:-replace-with-a-long-random-secret}
         depends_on:
+            db-migrate:
+                condition: service_completed_successfully
             workflows:
                 condition: service_healthy
             libsql:
                 condition: service_healthy
             server:
                 condition: service_healthy
+            redis-http:
+                condition: service_started
         healthcheck:
             test: ["CMD-SHELL", "curl -f http://localhost:3000/ || exit 1"]
             interval: 15s
