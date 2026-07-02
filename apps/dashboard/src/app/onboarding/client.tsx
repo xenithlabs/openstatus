@@ -238,9 +238,14 @@ export function Client() {
             isSubmitting={createPageMutation.isPending}
             onSubmit={async (values) => {
               if (!workspace?.id) return;
+              const isCustom = values.hostMode === "custom";
+              const derivedSlug =
+                values.slug ||
+                slugifyHostname(values.customDomain ?? "") ||
+                slugFallback;
               const newPage = await createPageMutation.mutateAsync({
-                slug: values.slug,
-                title: values.slug.replace(/-/g, " "),
+                slug: derivedSlug,
+                title: derivedSlug.replace(/-/g, " "),
                 description: "",
                 monitors: monitorData?.id
                   ? [{ monitorId: monitorData.id, order: 0 }]
@@ -249,6 +254,8 @@ export function Client() {
                 legacyPage: false,
                 forceTheme: values.forceTheme,
                 configuration: { theme: values.theme },
+                selfHosted: isCustom,
+                customDomain: isCustom ? values.customDomain : undefined,
               });
               const staticComponents = values.components?.filter(
                 (c) => c.name.trim() !== "",

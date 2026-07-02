@@ -13,6 +13,11 @@ import {
   FormMessage,
 } from "@openstatus/ui/components/ui/form";
 import { Input } from "@openstatus/ui/components/ui/input";
+import { Label } from "@openstatus/ui/components/ui/label";
+import {
+  RadioGroup,
+  RadioGroupItem,
+} from "@openstatus/ui/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -20,10 +25,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@openstatus/ui/components/ui/select";
+import { cn } from "@openstatus/ui/lib/utils";
 import { useDebounce } from "@openstatus/ui/hooks/use-debounce";
 import { useQuery } from "@tanstack/react-query";
 import { isTRPCClientError } from "@trpc/client";
-import { Laptop, Moon, Plus, Sun, X } from "lucide-react";
+import { Globe, Laptop, Link2, Moon, Plus, Sun, X } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useTransition } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
@@ -38,10 +44,6 @@ import { useTRPC } from "@/lib/trpc/client";
 const SLUG_UNIQUE_ERROR_MESSAGE =
   "This slug is already taken. Please choose another one.";
 
-// Keep in sync with `slugSchema` in
-// `packages/db/src/schema/pages/validation.ts`. We can't import that on the
-// client because `@openstatus/db` is server-only. Slugs are stored lowercase
-// (subdomains are case-insensitive), so we restrict input client-side too.
 const SLUG_PATTERN = /^[a-z0-9-]+$/;
 const SLUG_PATTERN_MESSAGE =
   "Only use digits (0-9), hyphen (-) or lowercase characters (a-z).";
@@ -52,18 +54,63 @@ const FORCE_THEME_OPTIONS = [
   { value: "system", label: "System", icon: Laptop },
 ] as const;
 
-const schema = z.object({
-  slug: z.string().min(3).regex(SLUG_PATTERN, SLUG_PATTERN_MESSAGE),
-  theme: z.enum(THEME_KEYS as [ThemeKey, ...ThemeKey[]]),
-  forceTheme: z.enum(["light", "dark", "system"]),
-  components: z
-    .array(
-      z.object({
-        name: z.string().min(1, "Component name is required"),
-      }),
-    )
-    .optional(),
-});
+const HOST_MODE_OPTIONS = [
+  {
+    value: "subdomain" as const,
+    label: "Subdomain",
+    icon: Globe,
+    description: "Host on openstatus.dev",
+  },
+  {
+    value: "custom" as const,
+    label: "Custom Domain",
+    icon: Link2,
+    description: "Use your own domain",
+  },
+] as const;
+
+function slugFromDomain(domain: string): string {
+  return domain
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 128);
+}
+
+const schema = z
+  .object({
+    slug: z.string().regex(SLUG_PATTERN, SLUG_PATTERN_MESSAGE).optional(),
+    hostMode: z.enum(["subdomain", "custom"]),
+    customDomain: z.string().optional(),
+    theme: z.enum(THEME_KEYS as [ThemeKey, ...ThemeKey[]]),
+    forceTheme: z.enum(["light", "dark", "system"]),
+    components: z
+      .array(
+        z.object({
+          name: z.string().min(1, "Component name is required"),
+        }),
+      )
+      .optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.hostMode === "subdomain" && !data.slug?.trim()) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Subdomain slug is required",
+        path: ["slug"],
+      });
+    }
+    if (data.hostMode === "custom" && !data.customDomain?.trim()) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Custom domain is required",
+        path: ["customDomain"],
+      });
+    }
+  });
 
 export type FormValues = z.infer<typeof schema>;
 
@@ -76,7 +123,6 @@ export function CreatePageForm({
 }: Omit<React.ComponentProps<"form">, "onSubmit"> & {
   defaultValues?: Partial<FormValues>;
   onSubmit: (values: FormValues) => Promise<void>;
-  /** Mirror live form values to a parent that needs them (e.g. a preview). */
   onValuesChange?: (values: FormValues) => void;
   showComponents?: boolean;
 }) {
@@ -87,6 +133,8 @@ export function CreatePageForm({
     resolver: zodResolver(schema),
     defaultValues: {
       slug: "",
+      hostMode: "subdomain",
+      customDomain: "",
       theme: "default-rounded",
       forceTheme:
         dashboardTheme === "dark" || dashboardTheme === "light"
@@ -98,7 +146,9 @@ export function CreatePageForm({
   });
   const [isPending, startTransition] = useTransition();
   const watchSlug = form.watch("slug");
-  const debouncedSlug = useDebounce(watchSlug, 500);
+  const watchHostMode = form.watch("hostMode");
+  const watchCustomDomain = form.watch("customDomain");
+  const debouncedSlug = useDebounce(watchSlug ?? "", 500);
   const { data: isUnique } = useQuery(
     trpc.page.getSlugUniqueness.queryOptions(
       { slug: debouncedSlug },
@@ -110,6 +160,8 @@ export function CreatePageForm({
     control: form.control,
     name: "components",
   });
+
+  // Show derived slug as placeholder hint only — user controls the slug directly
 
   useEffect(() => {
     if (isUnique === false) {
@@ -167,25 +219,120 @@ export function CreatePageForm({
       >
         <FormField
           control={form.control}
-          name="slug"
+          name="hostMode"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Slug</FormLabel>
+              <FormLabel>Hosting</FormLabel>
               <FormControl>
-                <InputWithAddons
-                  placeholder="status"
-                  trailing=".openstatus.dev"
-                  {...field}
-                />
+                <RadioGroup
+                  value={field.value}
+                  onValueChange={(v) =>
+                    field.onChange(v as "subdomain" | "custom")
+                  }
+                  className="grid grid-cols-2 gap-3"
+                >
+                  {HOST_MODE_OPTIONS.map((opt) => (
+                    <Label
+                      key={opt.value}
+                      htmlFor={`create-host-${opt.value}`}
+                      className={cn(
+                        "flex flex-col items-center gap-1.5 rounded-lg border p-3 cursor-pointer",
+                        "hover:bg-accent hover:text-accent-foreground",
+                        field.value === opt.value &&
+                          "border-primary bg-accent text-accent-foreground",
+                      )}
+                    >
+                      <RadioGroupItem
+                        value={opt.value}
+                        id={`create-host-${opt.value}`}
+                        className="sr-only"
+                      />
+                      <opt.icon className="size-4" />
+                      <div className="text-center">
+                        <div className="text-xs font-medium">{opt.label}</div>
+                      </div>
+                    </Label>
+                  ))}
+                </RadioGroup>
               </FormControl>
               <FormMessage />
-              <FormDescription>
-                Choose a unique subdomain for your status page (minimum 3
-                characters).
-              </FormDescription>
             </FormItem>
           )}
         />
+
+        {watchHostMode === "subdomain" ? (
+          <FormField
+            control={form.control}
+            name="slug"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Slug</FormLabel>
+                <FormControl>
+                  <InputWithAddons
+                    placeholder="status"
+                    trailing=".openstatus.dev"
+                    {...field}
+                    value={field.value ?? ""}
+                  />
+                </FormControl>
+                <FormMessage />
+                <FormDescription>
+                  Choose a unique subdomain for your status page (minimum 3
+                  characters).
+                </FormDescription>
+              </FormItem>
+            )}
+          />
+        ) : (
+          <FormField
+            control={form.control}
+            name="customDomain"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Custom Domain</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="status.example.com"
+                    {...field}
+                    value={field.value ?? ""}
+                  />
+                </FormControl>
+                <FormDescription>
+                  Use your own domain (e.g. status.yourcompany.com).
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
+
+        {watchHostMode === "custom" && (
+          <FormField
+            control={form.control}
+            name="slug"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Identifier</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder={
+                      slugFromDomain(watchCustomDomain ?? "") ||
+                      "status-page"
+                    }
+                    {...field}
+                    value={field.value ?? ""}
+                  />
+                </FormControl>
+                <FormDescription>
+                  Internal identifier. Auto-generated from your domain if left
+                  empty.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
+
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <FormField
             control={form.control}
@@ -211,8 +358,6 @@ export function CreatePageForm({
                   value={field.value}
                   onValueChange={(v) => {
                     field.onChange(v);
-                    // Mirror to the dashboard so the user previews exactly
-                    // what they'll publish. The whole shell flips with them.
                     setDashboardTheme(v);
                   }}
                 >

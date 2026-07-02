@@ -28,6 +28,8 @@ import {
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
+import { isSelfHost } from "@openstatus/utils";
+
 import { env } from "../env";
 import { toServiceCtx, toTRPCError } from "../service-adapter";
 import { createTRPCRouter, protectedProcedure } from "../trpc";
@@ -163,9 +165,11 @@ export const pageRouter = createTRPCRouter({
     .input(
       z.object({
         title: z.string(),
-        slug: z.string().toLowerCase(),
+        slug: z.string().toLowerCase().optional(),
         icon: z.string().nullish(),
         description: z.string().nullish(),
+        selfHosted: z.boolean().optional().default(false),
+        customDomain: z.string().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -177,6 +181,8 @@ export const pageRouter = createTRPCRouter({
             slug: input.slug,
             icon: input.icon,
             description: input.description,
+            selfHosted: input.selfHosted,
+            customDomain: input.customDomain,
           },
         });
       } catch (err) {
@@ -242,16 +248,23 @@ export const pageRouter = createTRPCRouter({
         });
         const newDomain = input.customDomain;
 
-        if (newDomain && !oldDomain) {
-          await addDomainToVercel(newDomain);
-        } else if (oldDomain && newDomain && newDomain !== oldDomain) {
-          await addDomainToVercel(newDomain);
-          await removeDomainFromVercel(oldDomain);
-        } else if (oldDomain && newDomain === "") {
-          await removeDomainFromVercel(oldDomain);
-        } else if (newDomain) {
-          await addDomainToVercel(newDomain);
-        } else {
+        // Vercel domain registration — skip in self-hosted mode where
+        // Vercel tokens are placeholders and the API would 401/500.
+        if (!isSelfHost()) {
+          if (newDomain && !oldDomain) {
+            await addDomainToVercel(newDomain);
+          } else if (oldDomain && newDomain && newDomain !== oldDomain) {
+            await addDomainToVercel(newDomain);
+            await removeDomainFromVercel(oldDomain);
+          } else if (oldDomain && newDomain === "") {
+            await removeDomainFromVercel(oldDomain);
+          } else if (newDomain) {
+            await addDomainToVercel(newDomain);
+          }
+        }
+
+        // Clearing an already-empty domain — nothing to do.
+        if (!oldDomain && !newDomain) {
           return;
         }
 

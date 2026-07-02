@@ -1,3 +1,4 @@
+import { isSelfHost } from "@openstatus/utils";
 import { z } from "zod";
 
 import { env } from "../env";
@@ -47,6 +48,7 @@ export type DomainVerificationStatusProps =
   | "Valid Configuration"
   | "Invalid Configuration"
   | "Pending Verification"
+  | "Verification Skipped"
   | "Domain Not Found"
   | "Unknown Error";
 
@@ -56,6 +58,10 @@ export const domainRouter = createTRPCRouter({
     .query(async (opts) => {
       if (!opts.input.domain) {
         return null;
+      }
+      // Self-hosted deployments don't use Vercel for domain management.
+      if (isSelfHost()) {
+        return { verified: true };
       }
       const data = await fetch(
         `https://api.vercel.com/v9/projects/${env.PROJECT_ID_VERCEL}/domains/${opts.input.domain}?teamId=${env.TEAM_ID_VERCEL}`,
@@ -87,6 +93,10 @@ export const domainRouter = createTRPCRouter({
       if (!opts.input.domain) {
         return null;
       }
+      // Self-hosted deployments handle DNS independently of Vercel.
+      if (isSelfHost()) {
+        return { misconfigured: false };
+      }
       const data = await fetch(
         `https://api.vercel.com/v6/domains/${opts.input.domain}/config?teamId=${env.TEAM_ID_VERCEL}`,
         {
@@ -106,6 +116,10 @@ export const domainRouter = createTRPCRouter({
     .query(async (opts) => {
       if (!opts.input.domain) {
         return null;
+      }
+      // Self-hosted deployments skip Vercel domain verification.
+      if (isSelfHost()) {
+        return { verified: true };
       }
       const data = await fetch(
         `https://api.vercel.com/v9/projects/${env.PROJECT_ID_VERCEL}/domains/${opts.input.domain}/verify?teamId=${env.TEAM_ID_VERCEL}`,

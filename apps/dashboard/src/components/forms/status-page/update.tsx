@@ -101,12 +101,16 @@ export function FormStatusPageUpdate() {
           slug: statusPage.slug,
           description: statusPage.description,
           icon: statusPage.icon ?? undefined,
+          hostMode: (statusPage as { selfHosted?: boolean }).selfHosted
+            ? "custom"
+            : "subdomain",
+          customDomain: statusPage.customDomain || "",
         }}
         onSubmit={async (values) => {
           await updateStatusPageMutation.mutateAsync({
             id: Number.parseInt(id),
             title: values.title,
-            slug: values.slug,
+            slug: values.slug ?? "",
             description: values.description ?? "",
             icon: values.icon ?? "",
           });

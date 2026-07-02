@@ -3,6 +3,7 @@ import {
   pageComponent,
   selectPageSchema,
 } from "@openstatus/db/src/schema";
+import { db as defaultDb, sql } from "@openstatus/db";
 
 import { emitAudit } from "../audit";
 import { requireScope } from "../auth";
@@ -105,6 +106,21 @@ export async function createPage(args: {
   });
 }
 
+/**
+ * Derive a valid slug from a custom domain hostname.
+ * e.g. `status.mycompany.com` → `status-mycompany-com`
+ */
+function slugFromDomain(domain: string): string {
+  return domain
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 128);
+}
+
 /** Minimal create — matches the dashboard onboarding `new` shape. */
 export async function newPage(args: {
   ctx: ServiceContext;
@@ -114,9 +130,33 @@ export async function newPage(args: {
   requireScope(ctx, "write");
   const input = NewPageInput.parse(args.input);
 
+  const isSelfHosted = input.selfHosted === true && !!input.customDomain;
+
+  // For self-hosted pages: use the user-provided slug if non-empty, otherwise
+  // auto-derive from the custom domain. Falls back to a random suffix on collision.
+  let finalSlug: string;
+  if (isSelfHosted) {
+    finalSlug =
+      (input.slug?.trim() || slugFromDomain(input.customDomain!)) ||
+      `page-${Math.random().toString(36).slice(2, 6)}`;
+    // Deconflict: append random suffix if the slug is already taken
+    const db = ctx.db ?? defaultDb;
+    const rows = await db
+      .select({ id: page.id })
+      .from(page)
+      .where(sql`lower(${page.slug}) = ${finalSlug}`)
+      .all();
+    if (rows.length > 0) {
+      finalSlug = `${finalSlug.slice(0, 120)}-${Math.random().toString(36).slice(2, 6)}`;
+    }
+  } else {
+    // superRefine guarantees slug is present for non-self-hosted pages
+    finalSlug = input.slug!;
+  }
+
   return withTransaction(ctx, async (tx) => {
     await assertStatusPageQuota(tx, ctx.workspace);
-    await assertSlugAvailable({ tx, slug: input.slug });
+    await assertSlugAvailable({ tx, slug: finalSlug });
 
     const defaultConfiguration = {
       type: "absolute",
@@ -130,13 +170,14 @@ export async function newPage(args: {
       .values({
         workspaceId: ctx.workspace.id,
         title: input.title,
-        slug: input.slug,
+        slug: finalSlug,
         description: input.description ?? "",
         icon: input.icon ?? "",
         legacyPage: false,
         configuration: defaultConfiguration,
-        customDomain: "",
+        customDomain: isSelfHosted ? input.customDomain! : "",
         allowIndex: true,
+        selfHosted: isSelfHosted,
       })
       .returning()
       .get();
@@ -146,7 +187,7 @@ export async function newPage(args: {
       entityType: "page",
       entityId: row.id,
       after: row,
-      metadata: { slug: row.slug, source: "new" },
+      metadata: { slug: row.slug, source: "new", selfHosted: isSelfHosted },
     });
 
     // `selectPageSchema.parse` normalises the drizzle row into the

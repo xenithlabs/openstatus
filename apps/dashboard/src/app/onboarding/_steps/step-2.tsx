@@ -55,6 +55,8 @@ export function Step2({
   // paint before the user touches the inputs.
   const [previewValues, setPreviewValues] = useState<CreatePageFormValues>({
     slug: slugFallback,
+    hostMode: "subdomain",
+    customDomain: "",
     theme: "default-rounded",
     forceTheme: "system",
     components: monitorSkipped ? [{ name: "Website" }] : undefined,
@@ -78,8 +80,16 @@ export function Step2({
         </OnboardingStepHeader>
         {isLocked ? (
           <OnboardingLockedSummary
-            value={`${createdPageData?.slug}.openstatus.dev`}
-            href={`https://${createdPageData?.slug}.openstatus.dev`}
+            value={
+              submittedValues?.hostMode === "custom"
+                ? (submittedValues?.customDomain ?? "")
+                : `${createdPageData?.slug}.openstatus.dev`
+            }
+            href={
+              submittedValues?.hostMode === "custom"
+                ? `https://${submittedValues?.customDomain ?? ""}`
+                : `https://${createdPageData?.slug}.openstatus.dev`
+            }
             helper="Theme, components, and visibility are editable later from page settings."
           />
         ) : (
@@ -122,11 +132,11 @@ export function Step2({
             slug={
               isLocked
                 ? (createdPageData?.slug ?? "")
-                : lockedPreviewValues.slug
+                : (lockedPreviewValues.slug ?? "")
             }
             title={(isLocked
               ? (createdPageData?.title ?? "")
-              : lockedPreviewValues.slug
+              : (lockedPreviewValues.slug ?? "")
             ).replace(/-/g, " ")}
             components={lockedPreviewValues.components ?? []}
             monitorName={monitorName}

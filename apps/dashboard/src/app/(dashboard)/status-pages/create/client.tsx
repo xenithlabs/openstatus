@@ -48,11 +48,14 @@ export function Client() {
         <FormGeneral
           disabled={isPending}
           onSubmit={async (values) => {
+            const isCustom = values.hostMode === "custom";
             await createStatusPageMutation.mutateAsync({
               title: values.title,
-              slug: values.slug,
+              slug: values.slug || undefined,
               icon: values.icon,
               description: values.description,
+              selfHosted: isCustom,
+              customDomain: isCustom ? values.customDomain : undefined,
             });
           }}
         />

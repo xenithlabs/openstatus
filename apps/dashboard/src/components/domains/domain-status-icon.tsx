@@ -1,7 +1,7 @@
 "use client";
 
 import type { DomainVerificationStatusProps } from "@openstatus/api/src/router/domain";
-import { AlertTriangle, Check, LoaderCircle, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronRight, LoaderCircle, X } from "lucide-react";
 
 export function DomainStatusIcon({
   status,
@@ -22,6 +22,10 @@ export function DomainStatusIcon({
   ) : status === "Pending Verification" ? (
     <div className="bg-warning flex size-6 items-center justify-center rounded-full">
       <AlertTriangle className="text-background size-3" />
+    </div>
+  ) : status === "Verification Skipped" ? (
+    <div className="bg-muted flex size-6 items-center justify-center rounded-full">
+      <ChevronRight className="text-foreground size-3" />
     </div>
   ) : (
     <div className="bg-destructive flex size-6 items-center justify-center rounded-full">

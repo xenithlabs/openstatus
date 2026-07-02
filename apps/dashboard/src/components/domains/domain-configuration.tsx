@@ -62,6 +62,24 @@ export default function DomainConfiguration({ domain }: { domain: string }) {
 
   if (!status || !domainJson) return null;
 
+  // Self-hosted: Vercel domain verification is skipped — don't show DNS steps.
+  if (status === "Verification Skipped") {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-3 border border-transparent px-4">
+          <DomainStatusIcon status={status} loading={isLoading} />
+          <p className="text-sm font-semibold">Verification skipped</p>
+          <Badge variant="secondary">{domain}</Badge>
+        </div>
+        <p className="text-muted-foreground px-4 text-sm">
+          Running in self-hosted mode — domain verification is not required.
+          Your custom domain will be served directly if your reverse proxy or
+          DNS is configured to route traffic to this deployment.
+        </p>
+      </div>
+    );
+  }
+
   const subdomain =
     domainJson?.name && domainJson?.apexName
       ? getSubdomain(domainJson.name, domainJson.apexName)

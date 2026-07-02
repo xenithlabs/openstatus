@@ -49,9 +49,25 @@ export const NewPageInput = z.object({
   // Plain `z.string().toLowerCase()` here let malformed slugs through
   // that `insertPageSchema` would reject, so `create` and `new` had
   // diverging contracts.
-  slug: slugSchema,
+  //
+  // Optional for selfHosted pages (slug is auto-derived from the custom
+  // domain when not provided). Required for subdomain-hosted pages.
+  slug: slugSchema.optional(),
   icon: z.string().nullish(),
   description: z.string().nullish(),
+  // When true the page is hosted on a custom domain instead of a
+  // subdomain. Slug is auto-derived from the domain and Vercel
+  // registration is skipped. The domain is persisted to customDomain.
+  selfHosted: z.boolean().optional().default(false),
+  customDomain: z.string().optional(),
+}).superRefine((data, ctx) => {
+  if (!data.selfHosted && !data.slug?.trim()) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Slug is required for subdomain-hosted pages",
+      path: ["slug"],
+    });
+  }
 });
 export type NewPageInput = z.infer<typeof NewPageInput>;
 

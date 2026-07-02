@@ -57,7 +57,9 @@ export function FormCustomDomain({
     },
   });
   const [isPending, startTransition] = useTransition();
-  const { refresh, isLoading } = useDomainStatus(defaultValues?.domain);
+  const { refresh, isLoading, status } = useDomainStatus(defaultValues?.domain);
+
+  const verificationSkipped = status === "Verification Skipped";
 
   function submitAction(values: FormValues) {
     if (isPending) return;
@@ -82,11 +84,13 @@ export function FormCustomDomain({
     });
   }
 
-  // NOTE: poll every 30 seconds to check for the status
+  // NOTE: poll every 30 seconds to check for the status (Vercel DNS propagation).
+  // Skip polling in self-hosted mode — Vercel verification is not required.
   useEffect(() => {
+    if (verificationSkipped) return;
     const interval = setInterval(() => refresh(), 30_000);
     return () => clearInterval(interval);
-  }, [refresh]);
+  }, [refresh, verificationSkipped]);
 
   return (
     <Form {...form}>
@@ -107,8 +111,7 @@ export function FormCustomDomain({
                 <FormItem>
                   <Label>Domain</Label>
                   <InputWithAddons
-                    placeholder="status.openstatus.dev"
-                    leading="https://"
+                    placeholder="status.example.com"
                     disabled={locked}
                     {...field}
                   />
@@ -146,15 +149,17 @@ export function FormCustomDomain({
               </Button>
             ) : (
               <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  disabled={isPending || isLoading}
-                  onClick={refresh}
-                  className="hidden sm:block"
-                >
-                  {isLoading ? "Refreshing..." : "Refresh Configuration"}
-                </Button>
+                {!verificationSkipped && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={isPending || isLoading}
+                    onClick={refresh}
+                    className="hidden sm:block"
+                  >
+                    {isLoading ? "Refreshing..." : "Refresh Configuration"}
+                  </Button>
+                )}
                 <Button type="submit" disabled={isPending}>
                   {isPending ? "Submitting..." : "Submit"}
                 </Button>

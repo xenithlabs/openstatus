@@ -39,7 +39,12 @@ export function useDomainStatus(domain?: string) {
 
   let status: DomainVerificationStatusProps = "Valid Configuration";
 
-  if (domainJson?.error?.code === "not_found") {
+  // Self-hosted: Vercel verification is skipped entirely.
+  // domainJson.verified is the synthetic true we return from the domain router.
+  if (domainJson && !domainJson.error && domainJson.verified && !configJson && !verificationJson) {
+    status = "Verification Skipped";
+
+  } else if (domainJson?.error?.code === "not_found") {
     // domain not found on Vercel project
     status = "Domain Not Found";
 
