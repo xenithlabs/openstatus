@@ -72,8 +72,17 @@ export const createTRPCContext = async (opts: {
   serverSideCall?: boolean;
   auth?: () => Promise<Session>;
 }) => {
-  // Use provided auth function or return null session
-  const session = opts.auth ? await opts.auth() : null;
+  // Use provided auth function or return null session.
+  // Catch auth errors (e.g. NextAuth secret mismatch) — treat as no session
+  // so the protected middleware can surface a clean UNAUTHORIZED.
+  let session: Session | null = null;
+  if (opts.auth) {
+    try {
+      session = await opts.auth();
+    } catch {
+      session = null;
+    }
+  }
   const workspace = null;
   const user = null;
 
@@ -147,7 +156,10 @@ export const publicProcedure = t.procedure;
 const enforceUserIsAuthed = t.middleware(async (opts) => {
   const { ctx } = opts;
   if (!ctx.session?.user?.id) {
-    throw new TRPCError({ code: "UNAUTHORIZED" });
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: ctx.session ? "Session has no user id" : "No session",
+    });
   }
 
   // Test escape hatch: when NODE_ENV=test and the caller already

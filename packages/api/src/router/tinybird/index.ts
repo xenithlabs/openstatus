@@ -11,6 +11,25 @@ import { calculatePeriod } from "./utils";
 
 const tb = new OSTinybird(env.TINY_BIRD_API_KEY);
 
+// @chronark/zod-bird throws plain Error("Unauthorized") for 403 responses
+// from Tinybird. Convert it to a proper TRPCError with an actionable message.
+async function safePipeCall<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (err instanceof Error && err.message === "Unauthorized") {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message:
+          "Tinybird authentication failed — the API key is invalid or mismatched. " +
+          "If self-hosting, run scripts/tinybird-self-hosted-init.sh to deploy pipes and get a valid token. " +
+          "See docs/tinybird-self-hosted-deployment.md",
+      });
+    }
+    throw err;
+  }
+}
+
 const periods = ["1d", "7d", "14d", "30d", "90d"] as const;
 const types = ["http", "tcp", "dns"] as const;
 type Period = (typeof periods)[number];
@@ -282,11 +301,14 @@ export const tinybirdRouter = createTRPCRouter({
         period,
         _monitor.jobType as "http" | "tcp" | "dns",
       );
-      return await procedure({
-        ...opts.input,
-        fromDate: opts.input.from?.getTime() ?? undefined,
-        toDate: opts.input.to?.getTime(),
-      });
+      return await safePipeCall(() =>
+        // @ts-expect-error - jobType discriminates the pipe variant at runtime
+        procedure({
+          ...opts.input,
+          fromDate: opts.input.from?.getTime() ?? undefined,
+          toDate: opts.input.to?.getTime(),
+        }),
+      );
     }),
 
   uptime: protectedProcedure

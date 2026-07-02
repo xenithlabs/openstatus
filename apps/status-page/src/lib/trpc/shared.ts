@@ -1,16 +1,22 @@
 import type { AppRouter } from "@openstatus/api";
 import type { HTTPBatchLinkOptions, HTTPHeaders, TRPCLink } from "@trpc/client";
 import { httpBatchLink } from "@trpc/client";
-import type { TRPCError } from "@trpc/server";
 import superjson from "superjson";
 
 /**
  * Shared onError handler for tRPC route handlers.
  */
 export function createOnError(label: string) {
-  return ({ error }: { error: TRPCError }) => {
-    console.log(`Error in tRPC handler (${label})`);
-    console.error(error);
+  return (opts: {
+    error: { code: string; message: string };
+    path?: string;
+    req?: Request;
+  }) => {
+    const path = opts.path ?? "?";
+    const url = opts.req?.url ?? "?";
+    console.log(
+      `tRPC error (${label}) [${opts.error.code}] ${opts.error.message} — path=${path} url=${url}`,
+    );
   };
 }
 

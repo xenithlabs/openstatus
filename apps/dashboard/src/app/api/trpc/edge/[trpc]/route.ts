@@ -1,4 +1,4 @@
-import { createTRPCContext } from "@openstatus/api";
+import { createTRPCContext } from "@openstatus/api/src/trpc";
 import { edgeRouter } from "@openstatus/api/src/edge";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import type { NextRequest } from "next/server";
