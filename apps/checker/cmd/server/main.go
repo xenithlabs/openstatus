@@ -171,6 +171,7 @@ func main() {
 	var region string
 	cronSecret := env("CRON_SECRET", "")
 	tinyBirdToken := env("TINYBIRD_TOKEN", "")
+	tinyBirdURL := env("TINYBIRD_URL", "https://api.tinybird.co")
 	logLevel := env("LOG_LEVEL", "info")
 	cloudProvider := env("CLOUD_PROVIDER", "fly")
 	axiomToken := env("AXIOM_TOKEN", "")
@@ -188,6 +189,16 @@ func main() {
 		log.Fatal().Msgf("unsupported cloud provider: %s", cloudProvider)
 	}
 	logger.Configure(logLevel)
+
+	log.Info().
+		Str("cloud_provider", cloudProvider).
+		Str("region", region).
+		Str("log_level", logLevel).
+		Str("tinybird_url", tinyBirdURL).
+		Bool("has_cron_secret", cronSecret != "").
+		Bool("has_tinybird_token", tinyBirdToken != "").
+		Bool("has_axiom_token", axiomToken != "").
+		Msg("checker initializing")
 
 	// Define resource with service name, version, and environment
 	res := resource.NewWithAttributes(
@@ -251,10 +262,13 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"message": "pong", "region": region, "provider": cloudProvider})
 	})
 
+	port := env("PORT", "8080")
 	httpServer := &http.Server{
-		Addr:    fmt.Sprintf("0.0.0.0:%s", env("PORT", "8080")),
+		Addr:    fmt.Sprintf("0.0.0.0:%s", port),
 		Handler: router,
 	}
+
+	log.Info().Str("port", port).Msg("checker listening")
 
 	go func() {
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -264,11 +278,12 @@ func main() {
 	}()
 
 	<-ctx.Done()
+	log.Info().Msg("checker shutting down")
 	if err := httpServer.Shutdown(ctx); err != nil {
 		log.Ctx(ctx).Error().Err(err).Msg("failed to shutdown http server")
-
 		return
 	}
+	log.Info().Msg("checker stopped")
 }
 
 func env(key, fallback string) string {

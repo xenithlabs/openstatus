@@ -18,13 +18,15 @@ import (
 )
 
 type DNSResponse struct {
-	ID            string `json:"id"`
-	ErrorMessage  string `json:"errorMessage"`
-	Region        string `json:"region"`
-	Trigger       string `json:"trigger"`
-	URI           string `json:"uri"`
+	State        string `json:"state"`
+	Type         string `json:"type"`
+	ID           string `json:"id"`
+	ErrorMessage string `json:"errorMessage"`
+	Region       string `json:"region"`
+	Trigger      string `json:"trigger"`
+	URI          string `json:"uri"`
 	RequestStatus string `json:"requestStatus,omitempty"`
-	Assertions    string `json:"assertions"`
+	Assertions   string `json:"assertions"`
 
 	Records map[string][]string `json:"records"`
 
@@ -288,6 +290,8 @@ func (h Handler) DNSHandlerRegion(c *gin.Context) {
 	requestStatus := statusMap[req.Status]
 
 	data := DNSResponse{
+		State:         "success",
+		Type:          "dns",
 		ID:            id.String(),
 		Region:        h.Region,
 		URI:           req.URI,
@@ -343,7 +347,7 @@ func (h Handler) DNSHandlerRegion(c *gin.Context) {
 	}
 
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "uri not reachable"})
+		c.JSON(http.StatusOK, gin.H{"state": "error", "message": "uri not reachable"})
 		return
 	}
 

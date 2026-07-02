@@ -32,6 +32,8 @@ type Timing struct {
 }
 
 type Response struct {
+	State     string            `json:"state"`
+	Type      string            `json:"type"`
 	Headers   map[string]string `json:"headers,omitempty"`
 	Body      string            `json:"body,omitempty"`
 	Error     string            `json:"error,omitempty"`
@@ -54,7 +56,7 @@ func decodeBase64Body(body string) ([]byte, error) {
 
 // FIXME: This should only return the TCP Timing Data;
 func Http(ctx context.Context, client *http.Client, inputData request.HttpCheckerRequest) (Response, error) {
-	logger := log.Ctx(ctx).With().Str("monitor", inputData.URL).Logger()
+	log.Info().Str("url", inputData.URL).Str("method", inputData.Method).Msg("HTTP check: starting")
 
 	var bodyBytes []byte
 	if inputData.Method == http.MethodPost {
@@ -66,8 +68,10 @@ func Http(ctx context.Context, client *http.Client, inputData request.HttpChecke
 			}
 		}
 		if contentType == "application/octet-stream" {
+			log.Info().Str("url", inputData.URL).Msg("HTTP check: decoding base64 body")
 			decoded, err := decodeBase64Body(inputData.Body)
 			if err != nil {
+				log.Error().Str("url", inputData.URL).Err(err).Msg("HTTP check: base64 decode failed")
 				return Response{}, fmt.Errorf("error while decoding base64: %w", err)
 			}
 			bodyBytes = decoded
@@ -78,9 +82,10 @@ func Http(ctx context.Context, client *http.Client, inputData request.HttpChecke
 		bodyBytes = []byte(inputData.Body)
 	}
 
+	log.Info().Str("url", inputData.URL).Msg("HTTP check: building request")
 	req, err := http.NewRequestWithContext(ctx, inputData.Method, inputData.URL, bytes.NewReader(bodyBytes))
 	if err != nil {
-		logger.Error().Err(err).Msg("error while creating req")
+		log.Error().Str("url", inputData.URL).Err(err).Msg("HTTP check: request creation failed")
 		return Response{}, fmt.Errorf("unable to create req: %w", err)
 	}
 	req.Header.Set("User-Agent", "OpenStatus/1.0")
@@ -118,13 +123,14 @@ func Http(ctx context.Context, client *http.Client, inputData request.HttpChecke
 
 	start := time.Now()
 
+	log.Info().Str("url", inputData.URL).Msg("HTTP check: sending request")
 	response, err := client.Do(req)
 	latency := time.Since(start).Milliseconds()
 
 	if err != nil {
-
 		var urlErr *url.Error
 		if errors.As(err, &urlErr) && urlErr.Timeout() {
+			log.Warn().Str("url", inputData.URL).Int64("latency_ms", latency).Msg("HTTP check: request timed out")
 			return Response{
 				Latency:   latency,
 				Timing:    timing,
@@ -133,18 +139,20 @@ func Http(ctx context.Context, client *http.Client, inputData request.HttpChecke
 			}, nil
 		}
 
-		logger.Error().Err(err).Msg("error while pinging")
-
+		log.Error().Str("url", inputData.URL).Err(err).Msg("HTTP check: request failed")
 		return Response{}, err
 	}
 
 	defer response.Body.Close()
+
+	log.Info().Str("url", inputData.URL).Int("status", response.StatusCode).Int64("latency_ms", latency).Msg("HTTP check: response received")
 
 	body, err := io.ReadAll(response.Body)
 
 	timing.TransferDone = time.Now().UTC().UnixMilli()
 
 	if err != nil {
+		log.Error().Str("url", inputData.URL).Err(err).Msg("HTTP check: failed to read response body")
 		return Response{
 			Latency:   latency,
 			Timing:    timing,
@@ -157,6 +165,8 @@ func Http(ctx context.Context, client *http.Client, inputData request.HttpChecke
 	for key := range response.Header {
 		headers[key] = response.Header.Get(key)
 	}
+
+	log.Info().Str("url", inputData.URL).Int("status", response.StatusCode).Int64("latency_ms", latency).Int("body_bytes", len(body)).Msg("HTTP check: complete")
 
 	return Response{
 		Timestamp: start.UTC().UnixMilli(),

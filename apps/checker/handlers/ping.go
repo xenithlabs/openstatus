@@ -136,6 +136,8 @@ func (h Handler) PingRegionHandler(c *gin.Context) {
 
 		res = r
 		res.Region = h.Region
+		res.State = "success"
+		res.Type = "http"
 
 		if tbData.RequestId != 0 {
 			if err := h.TbClient.SendEvent(ctx, tbData, dataSourceName); err != nil {
@@ -146,7 +148,7 @@ func (h Handler) PingRegionHandler(c *gin.Context) {
 		return nil
 	}
 	if err := backoff.Retry(op, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 3)); err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "url not reachable"})
+		c.JSON(http.StatusOK, gin.H{"state": "error", "message": "url not reachable"})
 
 		return
 	}

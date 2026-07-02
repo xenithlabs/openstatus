@@ -155,6 +155,8 @@ func (h Handler) TCPHandler(c *gin.Context) {
 		}
 
 		response = checker.TCPResponse{
+			State:     "success",
+			Type:      "tcp",
 			Timestamp: res.TCPStart,
 			Timing: checker.TCPResponseTiming{
 				TCPStart: res.TCPStart,
@@ -300,6 +302,8 @@ func (h Handler) TCPHandlerRegion(c *gin.Context) {
 		}
 
 		response = checker.TCPResponse{
+			State:     "success",
+			Type:      "tcp",
 			Timestamp: timestamp,
 			Timing: checker.TCPResponseTiming{
 				TCPStart: res.TCPStart,
@@ -340,7 +344,7 @@ func (h Handler) TCPHandlerRegion(c *gin.Context) {
 	}
 
 	if err := backoff.Retry(op, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 3)); err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "uri not reachable"})
+		c.JSON(http.StatusOK, gin.H{"state": "error", "message": "uri not reachable"})
 
 		return
 	}

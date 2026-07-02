@@ -2,9 +2,8 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"log/slog"
 	"net/http"
-
 	"os"
 	"os/signal"
 	"syscall"
@@ -23,37 +22,52 @@ const (
 )
 
 func main() {
+	logLevel := getEnv("LOG_LEVEL", "info")
+	setupLogger(logLevel)
+
+	apiKey := getEnv("OPENSTATUS_KEY", "")
+	ingestUrl := getEnv("OPENSTATUS_INGEST_URL", "https://openstatus-private-location.fly.dev")
+
+	slog.Info("starting openstatus private location probe",
+		"ingest_url", ingestUrl,
+		"has_key", apiKey != "",
+		"log_level", logLevel,
+		"config_refresh_interval", configRefreshInterval.String(),
+	)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Graceful shutdown on interrupt
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
-		<-sigChan
+		sig := <-sigChan
+		slog.Info("received signal, shutting down", "signal", sig.String())
 		cancel()
 	}()
-	fmt.Println("Launching openstatus private location checker")
+
 	s := tasks.New()
 	defer s.Stop()
 
-	apiKey := getEnv("OPENSTATUS_KEY", "")
-
 	monitorManager := scheduler.MonitorManager{
-		Client:    getClient(apiKey),
+		Client:    getClient(apiKey, ingestUrl),
 		JobRunner: job.NewJobRunner(),
 		Scheduler: s,
 	}
+
+	slog.Info("fetching initial monitor configuration")
+	monitorManager.UpdateMonitors(ctx)
+
 	configTicker := time.NewTicker(configRefreshInterval)
 	defer configTicker.Stop()
 
-	monitorManager.UpdateMonitors(ctx)
 	for {
 		select {
 		case <-ctx.Done():
+			slog.Info("probe shutting down")
 			return
 		case <-configTicker.C:
-			fmt.Println("fetching monitors")
+			slog.Debug("refreshing monitor configuration")
 			monitorManager.UpdateMonitors(ctx)
 		}
 	}
@@ -66,9 +80,7 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
-func getClient(apiKey string) v1.PrivateLocationServiceClient {
-	ingestUrl := getEnv("OPENSTATUS_INGEST_URL", "https://openstatus-private-location.fly.dev")
-
+func getClient(apiKey string, ingestUrl string) v1.PrivateLocationServiceClient {
 	client := v1.NewPrivateLocationServiceClient(
 		http.DefaultClient,
 		ingestUrl,
@@ -77,6 +89,25 @@ func getClient(apiKey string) v1.PrivateLocationServiceClient {
 	)
 
 	return client
+}
+
+func setupLogger(logLevel string) {
+	var level slog.Level
+	switch logLevel {
+	case "debug":
+		level = slog.LevelDebug
+	case "info":
+		level = slog.LevelInfo
+	case "warn":
+		level = slog.LevelWarn
+	case "error":
+		level = slog.LevelError
+	default:
+		level = slog.LevelInfo
+	}
+	opts := &slog.HandlerOptions{Level: level}
+	logger := slog.New(slog.NewTextHandler(os.Stdout, opts))
+	slog.SetDefault(logger)
 }
 
 func NewAuthInterceptor(token string) connect.UnaryInterceptorFunc {

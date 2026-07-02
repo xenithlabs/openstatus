@@ -13,6 +13,7 @@ import (
 	"github.com/openstatushq/openstatus/apps/checker/pkg/assertions"
 	v1 "github.com/openstatushq/openstatus/apps/checker/proto/private_location/v1"
 	"github.com/openstatushq/openstatus/apps/checker/request"
+	"github.com/rs/zerolog/log"
 )
 
 func ProtoNumberAssertionToComparator(assertion v1.NumberComparator) (request.NumberComparator, error) {
@@ -54,6 +55,7 @@ func ProtoStringAssertionToComparator(assertion v1.StringComparator) (request.St
 }
 
 func (jr jobRunner) HTTPJob(ctx context.Context, monitor *v1.HTTPMonitor) (*HttpPrivateRegionData, error) {
+	log.Info().Str("monitor_id", monitor.Id).Str("url", monitor.Url).Str("method", monitor.Method).Msg("HTTP job: starting")
 
 	retry := monitor.Retry
 	if retry == 0 {
@@ -115,6 +117,7 @@ func (jr jobRunner) HTTPJob(ctx context.Context, monitor *v1.HTTPMonitor) (*Http
 
 	op := func() (*HttpPrivateRegionData, error) {
 		called++
+		log.Info().Str("monitor_id", monitor.Id).Str("url", monitor.Url).Int("attempt", called).Int("max_attempts", int(retry)).Msg("HTTP job: running check")
 		res, err := checker.Http(ctx, requestClient, req)
 		if err != nil {
 			return nil, fmt.Errorf("unable to ping: %w", err)
@@ -222,7 +225,9 @@ func (jr jobRunner) HTTPJob(ctx context.Context, monitor *v1.HTTPMonitor) (*Http
 
 	resp, err := backoff.Retry(ctx, op, backoff.WithMaxTries(uint(retry)), backoff.WithBackOff(backoff.NewExponentialBackOff()))
 	if err != nil {
+		log.Error().Str("monitor_id", monitor.Id).Str("url", monitor.Url).Err(err).Int("attempts", called).Msg("HTTP job: failed after retries")
 		return nil, err
 	}
+	log.Info().Str("monitor_id", monitor.Id).Str("url", monitor.Url).Int64("latency_ms", resp.Latency).Int("status", resp.StatusCode).Str("status", resp.RequestStatus).Msg("HTTP job: complete")
 	return resp, nil
 }

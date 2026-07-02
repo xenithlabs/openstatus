@@ -116,12 +116,13 @@ func (mm *MonitorManager) UpdateMonitors(ctx context.Context) {
 				FuncWithTaskContext: func(ctx tasks.TaskContext) error {
 
 					monitor := m
+					c := context.Background()
 					log.Printf("Starting TCP job for monitor %s (%s)", monitor.Id, monitor.Uri)
-					data, err := mm.JobRunner.TCPJob(ctx.Context, monitor)
+					data, err := mm.JobRunner.TCPJob(c, monitor)
 					if err != nil {
 						log.Printf("TCP monitor check failed for %s (%s): %v", monitor.Id, monitor.Uri, err)
 					}
-					resp, ingestErr := mm.Client.IngestTCP(ctx.Context, &connect.Request[v1.IngestTCPRequest]{
+					resp, ingestErr := mm.Client.IngestTCP(c, &connect.Request[v1.IngestTCPRequest]{
 						Msg: &v1.IngestTCPRequest{
 							MonitorId:     monitor.Id,
 							Id:            data.ID,
@@ -162,35 +163,43 @@ func (mm *MonitorManager) UpdateMonitors(ctx context.Context) {
 			task := tasks.Task{
 				Interval: interval,
 				RunOnce:  false,
-				// StartAfter: time.Now().Add(5 * time.Millisecond),
 				RunSingleInstance: true,
 				FuncWithTaskContext: func(ctx tasks.TaskContext) error {
-
 					monitor := m
-					log.Printf("Starting TCP job for monitor %s (%s)", monitor.Id, monitor.Uri)
-					_, err := mm.JobRunner.DNSJob(ctx.Context, monitor)
+					c := context.Background()
+					log.Printf("Starting DNS job for monitor %s (%s)", monitor.Id, monitor.Uri)
+					data, err := mm.JobRunner.DNSJob(c, monitor)
 					if err != nil {
-						log.Printf("TCP monitor check failed for %s (%s): %v", monitor.Id, monitor.Uri, err)
+						log.Printf("DNS monitor check failed for %s (%s): %v", monitor.Id, monitor.Uri, err)
 					}
-					resp, ingestErr := mm.Client.IngestDNS(ctx.Context, &connect.Request[v1.IngestDNSRequest]{
-						Msg: &v1.IngestDNSRequest{
-							MonitorId: monitor.Id,
 
-							// Id:            data.ID,
-							// Uri:           monitor.Uri,
-							// Message:       data.Message,
-							// Latency:       data.Latency,
-							// RequestStatus: data.RequestStatus,
-							// Error:         int64(data.Error),
-							// CronTimestamp: data.CronTimestamp,
-							// Timestamp:     data.Timestamp,
+					records := make(map[string]*v1.Records)
+					if data != nil {
+						for k, v := range data.Records {
+							records[k] = &v1.Records{Record: v}
+						}
+					}
+
+					resp, ingestErr := mm.Client.IngestDNS(c, &connect.Request[v1.IngestDNSRequest]{
+						Msg: &v1.IngestDNSRequest{
+							MonitorId:     monitor.Id,
+							Id:            data.ID,
+							Uri:           monitor.Uri,
+							Message:       data.Message,
+							Latency:       data.Latency,
+							RequestStatus: data.RequestStatus,
+							Error:         int64(data.Error),
+							CronTimestamp: data.CronTimestamp,
+							Timestamp:     data.Timestamp,
+							Timing:        data.Timing,
+							Records:       records,
 						},
 					})
 					if ingestErr != nil {
-						log.Printf("Failed to ingest TCP result for %s (%s): %v", monitor.Id, monitor.Uri, ingestErr)
+						log.Printf("Failed to ingest DNS result for %s (%s): %v", monitor.Id, monitor.Uri, ingestErr)
 						return ingestErr
 					}
-					log.Printf("TCP monitor check succeeded for %s (%s), ingest response: %v", monitor.Id, monitor.Uri, resp)
+					log.Printf("DNS monitor check succeeded for %s (%s), ingest response: %v", monitor.Id, monitor.Uri, resp)
 
 					return nil
 				},
@@ -198,10 +207,10 @@ func (mm *MonitorManager) UpdateMonitors(ctx context.Context) {
 			err := mm.Scheduler.AddWithID(m.Id, &task)
 
 			if err != nil {
-				log.Printf("Failed to add TCP monitor job for %s (%s): %v", m.Id, m.Uri, err)
+				log.Printf("Failed to add DNS monitor job for %s (%s): %v", m.Id, m.Uri, err)
 				continue
 			}
-			log.Printf("Started TCP monitoring job for %s (%s)", m.Id, m.Uri)
+			log.Printf("Started DNS monitoring job for %s (%s)", m.Id, m.Uri)
 		}
 	}
 

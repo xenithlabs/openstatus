@@ -20,11 +20,12 @@ type DnsResponse struct {
 }
 
 func Dns(ctx context.Context, host string) (*DnsResponse, error) {
-	logger:= log.Ctx(ctx).With().Str("monitor", host).Logger()
+	log.Info().Str("host", host).Msg("DNS check: starting")
 
+	log.Info().Str("host", host).Msg("DNS check: looking up A/AAAA records")
 	ips, err := net.LookupIP(host)
 	if err != nil {
-		logger.Error().Err(err).Msg("DNS IP lookup failed")
+		log.Error().Str("host", host).Err(err).Msg("DNS check: A/AAAA lookup failed")
 		return nil, fmt.Errorf("failed to lookup IPs: %w", err)
 	}
 
@@ -38,19 +39,31 @@ func Dns(ctx context.Context, host string) (*DnsResponse, error) {
 			AAAA = append(AAAA, ip.String())
 		}
 	}
-	CNAME,err := lookupCNAME(host)
+	log.Info().Str("host", host).Int("a_count", len(A)).Int("aaaa_count", len(AAAA)).Msg("DNS check: A/AAAA resolved")
+
+	log.Info().Str("host", host).Msg("DNS check: looking up CNAME")
+	CNAME, err := lookupCNAME(host)
 	if err != nil {
-		logger.Error().Err(err).Msg("DNS CNAME record lookup failed")
+		log.Error().Str("host", host).Err(err).Msg("DNS check: CNAME lookup failed")
 		return nil, fmt.Errorf("failed to lookup CNAME record: %w", err)
 	}
-	MXRecords := lookupMX(host)
+	log.Info().Str("host", host).Str("cname", CNAME).Msg("DNS check: CNAME resolved")
 
-	NS,err  := lookupNS(host)
+	log.Info().Str("host", host).Msg("DNS check: looking up MX records")
+	MXRecords := lookupMX(host)
+	log.Info().Str("host", host).Int("mx_count", len(MXRecords)).Msg("DNS check: MX resolved")
+
+	log.Info().Str("host", host).Msg("DNS check: looking up NS records")
+	NS, err := lookupNS(host)
 	if err != nil {
-		logger.Error().Err(err).Msg("DNS NS record lookup failed")
+		log.Error().Str("host", host).Err(err).Msg("DNS check: NS lookup failed")
 		return nil, fmt.Errorf("failed to lookup NS record: %w", err)
 	}
+	log.Info().Str("host", host).Int("ns_count", len(NS)).Msg("DNS check: NS resolved")
+
+	log.Info().Str("host", host).Msg("DNS check: looking up TXT records")
 	TXT := lookupTXT(host)
+	log.Info().Str("host", host).Int("txt_count", len(TXT)).Msg("DNS check: TXT resolved")
 
 
 	response := &DnsResponse{
@@ -59,8 +72,14 @@ func Dns(ctx context.Context, host string) (*DnsResponse, error) {
 		CNAME: CNAME,
 		MX:    MXRecords,
 		NS:    NS,
-		TXT: TXT,
+		TXT:   TXT,
 	}
+
+	log.Info().Str("host", host).
+		Int("a", len(A)).Int("aaaa", len(AAAA)).
+		Str("cname", CNAME).Int("mx", len(MXRecords)).
+		Int("ns", len(NS)).Int("txt", len(TXT)).
+		Msg("DNS check: complete")
 
 	return response, nil
 }

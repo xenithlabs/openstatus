@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/openstatushq/openstatus/apps/checker/checker"
 	v1 "github.com/openstatushq/openstatus/apps/checker/proto/private_location/v1"
+	"github.com/rs/zerolog/log"
 )
 
 // AssertionResult tracks the results of running assertions
@@ -34,6 +35,8 @@ type TCPPrivateRegionData struct {
 // runAssertions performs all configured assertions for TCP and returns their results
 
 func (jobRunner) TCPJob(ctx context.Context, monitor *v1.TCPMonitor) (*TCPPrivateRegionData, error) {
+	log.Info().Str("monitor_id", monitor.Id).Str("uri", monitor.Uri).Msg("TCP job: starting")
+
 	retry := monitor.Retry
 	if retry == 0 {
 		retry = 3
@@ -48,6 +51,7 @@ func (jobRunner) TCPJob(ctx context.Context, monitor *v1.TCPMonitor) (*TCPPrivat
 
 	op := func() (*TCPPrivateRegionData, error) {
 		called++
+		log.Info().Str("monitor_id", monitor.Id).Str("uri", monitor.Uri).Int("attempt", called).Int("max_attempts", int(retry)).Msg("TCP job: running check")
 		res, err := checker.PingTCP(int(monitor.Timeout), monitor.Uri)
 		if err != nil {
 			if called < int(retry) {
@@ -108,7 +112,9 @@ func (jobRunner) TCPJob(ctx context.Context, monitor *v1.TCPMonitor) (*TCPPrivat
 		backoff.WithBackOff(backoff.NewExponentialBackOff()),
 	)
 	if err != nil {
+		log.Error().Str("monitor_id", monitor.Id).Str("uri", monitor.Uri).Err(err).Int("attempts", called).Msg("TCP job: failed after retries")
 		return nil, fmt.Errorf("TCP job failed after %d retries: %w", retry, err)
 	}
+	log.Info().Str("monitor_id", monitor.Id).Str("uri", monitor.Uri).Int64("latency_ms", resp.Latency).Str("status", resp.RequestStatus).Msg("TCP job: complete")
 	return resp, nil
 }
