@@ -11,6 +11,7 @@ import {
 } from "@/components/content/section";
 import { FormCardGroup } from "@/components/forms/form-card";
 import { FormApiKey } from "@/components/forms/settings/form-api-key";
+import { FormEmailConfig } from "@/components/forms/settings/form-email-config";
 import { FormMembers } from "@/components/forms/settings/form-members";
 import { FormSlug } from "@/components/forms/settings/form-slug";
 import { FormWorkspace } from "@/components/forms/settings/form-workspace";
@@ -36,6 +37,15 @@ export default function Page() {
   );
   const sendInvitationMutation = useMutation(
     trpc.emailRouter.sendTeamInvitation.mutationOptions(),
+  );
+  const updateEmailConfigMutation = useMutation(
+    trpc.workspace.updateEmailConfig.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({
+          queryKey: trpc.workspace.get.queryKey(),
+        });
+      },
+    }),
   );
   const createInvitationMutation = useMutation(
     trpc.invitation.create.mutationOptions({
@@ -80,6 +90,12 @@ export default function Page() {
                 workspace.limits.members === 1) ||
               workspace.limits.members !== "Unlimited"
             }
+          />
+          <FormEmailConfig
+            defaultValues={workspace.emailConfig}
+            onSubmit={async (values) => {
+              await updateEmailConfigMutation.mutateAsync(values);
+            }}
           />
           <FormApiKey />
         </FormCardGroup>

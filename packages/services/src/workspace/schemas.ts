@@ -15,3 +15,15 @@ export const UpdateWorkspaceNameInput = z.object({
   name: z.string().min(1),
 });
 export type UpdateWorkspaceNameInput = z.infer<typeof UpdateWorkspaceNameInput>;
+
+export const UpdateWorkspaceEmailConfigInput = z.object({
+  provider: z.enum(["resend", "smtp"]),
+  smtpHost: z.string().prefault(""),
+  smtpPort: z.coerce.number().int().min(1).max(65535).prefault(587),
+  smtpUser: z.string().prefault(""),
+  smtpPass: z.string().prefault(""),
+  smtpFrom: z.string().prefault(""),
+});
+export type UpdateWorkspaceEmailConfigInput = z.infer<
+  typeof UpdateWorkspaceEmailConfigInput
+>;
