@@ -71,12 +71,12 @@
        ┌───────────┐      │              ├──────────────────┐
        │ redis-http│      │              │                  │
        └─────┬─────┘      │              │           ┌──────┴──────┐
-             │ started    │ healthy      │           │  db-seed    │
-             ▼            ▼              ▼           │ (profile:   │
-       ┌───────────┐              ┌──────────────┐   │  seed, runs │
-       │ workflows │              │ private-loc  │   │  once)      │
-       └─────┬─────┘              └──────┬───────┘   └─────────────┘
-             │ healthy                  │ healthy
+             │ started    │ healthy      │           │  db-seed    │            │  unlock-    │
+             ▼            ▼              ▼           │ (profile:   │            │  self-hosted│
+       ┌───────────┐              ┌──────────────┐   │  seed, runs │            │ (profile:   │
+       │ workflows │              │ private-loc  │   │  once)      │            │  unlock,    │
+       └─────┬─────┘              └──────┬───────┘   └──────┬──────┘            │  runs once) │
+             │ healthy                  │ healthy          │                  └──────┬───────┘
     ┌────────┼────────┐        ┌───────┴───────┐
     ▼        ▼        ▼        ▼               ▼
 ┌───────┐ ┌───────┐ ┌─────────┐         ┌──────────────┐
@@ -414,10 +414,29 @@ The original PR was **not merged**, but equivalent or adapted changes were appli
 | `PRIVATE_LOCATION_TOKEN` in `.env.docker.example` + `.env.docker` | ✅ Applied | Added placeholder |
 | `.env` symlink to `.env.docker` | ✅ Applied | Eliminates compose interpolation warnings |
 
+## Self-Hosted Feature Limits
+
+By default, seeded workspaces use plan-level limits (e.g., the seed sets workspace 1 to the
+"team" plan). In self-hosted deployments there is no paid tier — all features should be
+available with generous limits.
+
+The `unlock-self-hosted` profile updates every workspace to the "scale" plan and sets permissive
+limits (9999 monitors, all regions, all notification providers, all add-on features enabled).
+
+```bash
+# After seeding, unlock all features:
+docker compose --profile unlock run unlock-self-hosted
+```
+
+| Service | Profile | Purpose |
+|---------|---------|---------|
+| `db-seed` | `seed` | Populate initial workspace, monitors, status pages, notifications |
+| `unlock-self-hosted` | `unlock` | Set plan=scale and max limits on all workspaces |
+
 ## Verification
 
 ```bash
-# Start all 13 containers (12 services + 1 seed profile)
+# Start all 15 containers (11 runtime services + 3 one-shot + 1 seed profile)
 docker compose up -d
 
 # Check status — all should be healthy
@@ -428,6 +447,13 @@ curl -s -X POST "http://localhost:8080/v2/pipeline" \
   -H "Content-Type: application/json" \
   -d '{"requests":[{"type":"execute","stmt":{"sql":"PRAGMA table_info(page)"}}]}' \
   | python3 -c "import json,sys; r=json.load(sys.stdin); cols=[row[1] for row in r['results'][0]['response']['result']['rows']]; print('OK' if 'self_hosted' in cols else 'MIGRATION MISSING: run docker compose up db-migrate')"
+
+# Seed the database
+# (Without profiles, docker compose up -d only starts runtime services)
+docker compose --profile seed run db-seed
+
+# Unlock all features for self-hosted
+docker compose --profile unlock run unlock-self-hosted
 
 # Access services
 open http://localhost:3002   # Dashboard

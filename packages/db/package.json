@@ -11,6 +11,7 @@
     "studio": "drizzle-kit studio",
     "env": "bun env.ts",
     "seed": "bun src/seed.mts",
+    "unlock": "bun ../../scripts/unlock-self-hosted.ts",
     "dev": "turso dev --db-file ../../openstatus-dev.db"
   },
   "dependencies": {

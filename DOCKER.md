@@ -2,8 +2,9 @@
 
 Complete guide for running OpenStatus with Docker.
 
-> **Updated 2026-07-02:** The full deployment now includes 13 containers — 12 runtime
-> services plus a one-shot seed profile. See **[docs/self-hosted-docker-architecture.md](docs/self-hosted-docker-architecture.md)**
+> **Updated 2026-07-02:** The full deployment includes 14 services — 11 runtime
+> services plus 3 one-shot profiles (db-migrate, db-seed, unlock-self-hosted).
+> See **[docs/self-hosted-docker-architecture.md](docs/self-hosted-docker-architecture.md)**
 > for the complete architecture reference.
 
 ## Quick Start
@@ -31,10 +32,13 @@ chmod +x scripts/tinybird-self-hosted-init.sh
 # Copy the printed admin token into .env.docker as TINY_BIRD_API_KEY and TINYBIRD_TOKEN
 # Then recreate services: docker compose up -d private-location checker server dashboard status-page
 
-# 7. (Optional) Seed database with test data
+# 7. Seed database with test data
 docker compose --profile seed run db-seed
 
-# 8. Access the application
+# 8. Unlock all features (sets scale plan + max limits on all workspaces)
+docker compose --profile unlock run unlock-self-hosted
+
+# 9. Access the application
 open http://localhost:3002  # Dashboard
 open http://localhost:3003  # Status Page
 ```
@@ -57,7 +61,8 @@ docker builder prune
 | Service | Port | Purpose |
 |---------|------|---------|
 | db-migrate | — | One-shot: runs database migrations at startup |
-| db-seed | — | One-shot (profile gated): seeds test data |
+| db-seed | — | One-shot (profile: seed): seeds test data |
+| unlock-self-hosted | — | One-shot (profile: unlock): unlocks all features |
 | workflows | 3000 | Background jobs + cron scheduling |
 | server | 3001 | API backend (tRPC) |
 | dashboard | 3002 | Admin interface |
@@ -131,7 +136,7 @@ OpenStatus ships three Docker Compose files for different needs:
 
 | File | When to use | Builds? | Includes |
 |------|-------------|---------|----------|
-| `docker-compose.yaml` | Full deployment (recommended) | ✅ From source | All 12 services + migrations + seed |
+| `docker-compose.yaml` | Full deployment (recommended) | ✅ From source | All 14 services (11 runtime + 3 one-shot) |
 | `docker-compose-lightweight.yaml` | Quick demo: dashboard + status-page only | ✅ From source | libsql, dashboard, status-page. No analytics, probes, or caching |
 | `docker-compose.github-packages.yaml` | Production with pre-built images | ❌ Pulls from ghcr.io | libsql, tinybird, workflows, server, checker, dashboard, status-page |
 
@@ -144,29 +149,22 @@ docker compose -f docker-compose-lightweight.yaml up -d
 
 ### Automatic Migrations
 
-Migrations run **automatically** when you start the stack with `docker compose up -d`.
+Migrations run **automatically** when you start the stack via the `db-migrate` one-shot
+service. It applies all pending migrations before any runtime service starts.
 
 **Verifying migrations:**
 ```bash
-# Check workflows logs for migration output
-docker compose logs workflows | grep -A 5 "Running database migrations"
+# Check db-migrate logs for migration output
+docker compose logs db-migrate
 
 # Should show:
-# openstatus-workflows  | Running database migrations...
-# openstatus-workflows  | Migrated successfully
-# openstatus-workflows  | Starting workflows service...
+# openstatus-db-migrate  | Running migrations
+# openstatus-db-migrate  | Migrated successfully
 ```
 
-**Manual migration:**
-
-If you need to re-run migrations or troubleshoot:
-
+**Re-running migrations:**
 ```bash
-# Run migrations using workflows container
-docker compose exec workflows sh -c "cd /app/packages/db && bun src/migrate.mts"
-
-# Or restart workflows to trigger migrations again
-docker compose restart workflows
+docker compose run db-migrate
 ```
 
 ### Seeding Test Data (Optional)
@@ -184,6 +182,19 @@ This creates:
 - 5 sample monitors and 1 status page with slug `status`
 - Test user account: `ping@openstatus.dev`
 - Sample incidents, status reports, and maintenance windows
+
+**After seeding, unlock all features** (self-hosted only):
+
+Seeded workspaces use plan-level limits (workspace 1 gets the "team" plan).
+Unlock sets every workspace to the "scale" plan with generous limits:
+
+```bash
+docker compose --profile unlock run unlock-self-hosted
+```
+
+This enables custom domains, all notification providers, private locations,
+unlimited monitors, and every add-on feature (white-label, IP restriction,
+email-domain auth, no-index).
 
 **Verifying seeded data:**
 ```bash

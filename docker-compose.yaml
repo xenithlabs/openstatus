@@ -130,6 +130,25 @@ services:
                 condition: service_completed_successfully
         restart: "no"
 
+    unlock-self-hosted:
+        container_name: openstatus-unlock-self-hosted
+        image: oven/bun:1.3.6
+        networks:
+            - openstatus
+        working_dir: /app/packages/db
+        volumes:
+            - .:/app
+        env_file:
+            - .env.docker
+        environment:
+            - DATABASE_URL=http://libsql:8080
+        command: ["sh", "-c", "bun install && bun run unlock"]
+        profiles: ["unlock"]
+        depends_on:
+            db-migrate:
+                condition: service_completed_successfully
+        restart: "no"
+
     # Internal Services
     workflows:
         container_name: openstatus-workflows
