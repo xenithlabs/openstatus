@@ -44,7 +44,7 @@ func UpdateStatus(ctx context.Context, updateData UpdateData) error {
 		if workflowsUrl == "" {
 			workflowsUrl = "http://localhost:3000"
 		}
-		url := fmt.Sprintf("%s/checker/updateStatus", workflowsUrl)
+		url := fmt.Sprintf("%s/updateStatus", workflowsUrl)
 
 		payloadBuf := new(bytes.Buffer)
 		if err := json.NewEncoder(payloadBuf).Encode(updateData); err != nil {

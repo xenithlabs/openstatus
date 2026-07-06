@@ -177,8 +177,9 @@ These three Go services serve different roles:
 | **Lifecycle** | HTTP listener | Scheduler loop | HTTP listener |
 | **Auth** | `CRON_SECRET` (Basic) | `OPENSTATUS_KEY` (token header) | Validates `openstatus-token` against DB |
 | **Receives from** | workflows (POST /checker/*) | private-location (Monitors RPC) | private-probe (Monitors/Ingest RPCs) |
-| **Reports to** | workflows (/checker/updateStatus) | private-location (Ingest RPCs) | Tinybird |
+| **Reports to** | workflows (/checker/updateStatus) | private-location (IngestHTTP/TCP/DNS RPCs) | Tinybird |
 | **DB access** | Indirect (via workflows) | None | Direct libsql |
+| **Monitor types** | HTTP, TCP | HTTP, TCP, DNS | HTTP, TCP, DNS |
 | **Docker image** | `openstatus/checker` | `openstatus/private-probe` | `openstatus/private-location` |
 | **Dockerfile** | `apps/checker/Dockerfile` | `apps/checker/Dockerfile.probe` | `apps/private-location/Dockerfile` |
 
@@ -199,9 +200,31 @@ private-probe ──ConnectRPC──► private-location
                   IngestTCP()
                   IngestDNS()
                                     │
-                                    ├──► libsql (validates token, reads monitors)
-                                    └──► Tinybird (analytics)
+                                    ├──► libsql (validates token, reads monitor + assertions)
+                                    └──► Tinybird (analytics via datasources)
+                                         ├── ping_response__v8  (HTTP)
+                                         ├── tcp_response__v0   (TCP)
+                                         └── dns_response__v0   (DNS, requires assertions field)
+
+Dashboard reads:
+  ├── trpc.tinybird.list       → endpoint__{http|tcp|dns}_list_* pipes
+  ├── trpc.tinybird.metrics    → endpoint__{http|tcp|dns}_metrics_* pipes
+  └── trpc.tinybird.globalMetrics → endpoint__{http|tcp|dns}_metrics_global_1d pipes
 ```
+
+### Tinybird Datasource Mapping
+
+The private-location server sends check results to Tinybird datasources. The mapping between
+Go constants and Tinybird datasource names is critical:
+
+| Go constant | Tinybird datasource | Monitor type |
+|---|---|---|
+| `DatasourceHTTP` = `"ping_response__v8"` | `ping_response__v8` | HTTP |
+| `DatasourceTCP` = `"tcp_response__v0"` | `tcp_response__v0` | TCP |
+| `DatasourceDNS` = `"dns_response__v0"` | `dns_response__v0` | DNS |
+
+If these names don't match the datasources deployed by the init script, events will be
+quarantined (DNS `assertions` field is required by the schema) or sent to the wrong table.
 
 ### Bootstrap: Private Location Token
 
@@ -432,6 +455,49 @@ docker compose --profile unlock run unlock-self-hosted
 |---------|---------|---------|
 | `db-seed` | `seed` | Populate initial workspace, monitors, status pages, notifications |
 | `unlock-self-hosted` | `unlock` | Set plan=scale and max limits on all workspaces |
+
+## Troubleshooting
+
+### DNS/TCP monitors show no data in dashboard
+
+**Symptom:** Private-probe logs show successful checks, but dashboard logs page is empty or shows errors.
+
+**Common causes:**
+
+1. **Missing required columns** — The `dns_response__v0` datasource has required (non-nullable)
+   columns including `assertions` and `resolver`. If the private-location's ingest handler
+   omits either field in the JSON payload, every event is silently dropped — Tinybird accepts
+   the HTTP request (202) but quarantines rows at the data layer. Verify row count:
+   ```sh
+   docker compose exec tinybird-local clickhouse-client --query "SELECT count() FROM d_22d932.dns_response__v0"
+   ```
+
+2. **Wrong datasource name** — The Go constant `DatasourceDNS` must match the Tinybird
+   datasource name exactly (`dns_response__v0`). A mismatch sends events to a non-existent
+   or wrong table.
+
+3. **requestStatus enum mismatch** — The probe must send `"success"` (not `"active"`) as the
+   default request status. The dashboard SDK validates against `["error", "success", "degraded"]`.
+   Old data can be fixed: `ALTER TABLE ... UPDATE requestStatus = 'success' WHERE requestStatus = 'active'`
+
+4. **Tinybird project not deployed** — The `tinybird-local` container starts empty. Run
+   `./scripts/tinybird-self-hosted-init.sh` to deploy pipes, datasources, and endpoints.
+
+5. **Dashboard not restarted after Tinybird deploy** — Restart: `docker compose restart dashboard server status-page`
+
+### Monitor ID mismatch in IngestDNS/IngestTCP
+
+**Symptom:** `"sql: no rows in result set"` error with `error.type=monitor_lookup`.
+
+**Cause:** The handler passed `req.Msg.Id` (check-run UUID like `"dns-123"`) instead of
+`req.Msg.MonitorId` (the numeric monitor ID) to the database lookup query.
+
+### Tinybird endpoint push fails
+
+**Symptom:** `tb push endpoints/` fails with `"Invalid results"`.
+
+**Cause:** Pipe checker tests run against empty datasources. Use `--no-check` flag:
+`TB_VERSION_WARNING=0 tb push endpoints/ --force --yes --no-check`
 
 ## Verification
 

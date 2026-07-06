@@ -1,0 +1,1 @@
+ALTER TABLE `monitor` ADD `updates_status` integer DEFAULT true;

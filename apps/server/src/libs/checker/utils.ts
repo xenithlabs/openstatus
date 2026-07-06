@@ -38,6 +38,7 @@ export function getCheckerPayload(
           : undefined,
         retry: monitor.retry ?? 0,
         followRedirects: monitor.followRedirects ?? false,
+        updatesStatus: monitor.updatesStatus ?? true,
       };
     case "tcp":
       return {
@@ -57,7 +58,7 @@ export function getCheckerPayload(
             }
           : undefined,
         retry: monitor.retry ?? 0,
-        followRedirects: monitor.followRedirects ?? false,
+        updatesStatus: monitor.updatesStatus ?? true,
       };
     default:
       throw new OpenStatusApiError({

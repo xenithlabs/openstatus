@@ -96,7 +96,8 @@ func TestIngestDNS_DBError(t *testing.T) {
 	h := server.NewPrivateLocationServer(testDB(), tinybird.NewClient(http.DefaultClient, ""))
 
 	req := connect.NewRequest(&private_locationv1.IngestDNSRequest{
-		Id:        "nonexistent-monitor",
+		Id:        "dns-check-1",
+		MonitorId: "999",
 		Timestamp: 1234567890,
 	})
 	req.Header().Set("openstatus-token", "invalid-token")
@@ -117,7 +118,8 @@ func TestIngestDNS_MonitorNotExist(t *testing.T) {
 	h := server.NewPrivateLocationServer(testDB(), tinybird.NewClient(http.DefaultClient, ""))
 
 	req := connect.NewRequest(&private_locationv1.IngestDNSRequest{
-		Id:        "nonexistent-monitor",
+		Id:        "dns-check-2",
+		MonitorId: "999",
 		Timestamp: 1234567890,
 	})
 	req.Header().Set("openstatus-token", "my-secret-key")
@@ -138,7 +140,8 @@ func TestIngestDNS_MonitorExist(t *testing.T) {
 	h := server.NewPrivateLocationServer(testDB(), getTBClient(context.Background()))
 
 	req := connect.NewRequest(&private_locationv1.IngestDNSRequest{
-		Id:            "5",
+		Id:            "dns-check-3",
+		MonitorId:     "7",
 		Timestamp:     1234567890,
 		Latency:       50,
 		CronTimestamp: 1234567800,
@@ -161,7 +164,8 @@ func TestIngestDNS_WithRecords(t *testing.T) {
 	h := server.NewPrivateLocationServer(testDB(), getTBClient(context.Background()))
 
 	req := connect.NewRequest(&private_locationv1.IngestDNSRequest{
-		Id:            "5",
+		Id:            "dns-check-4",
+		MonitorId:     "7",
 		Timestamp:     1234567890,
 		Latency:       50,
 		CronTimestamp: 1234567800,
@@ -191,7 +195,8 @@ func TestIngestDNS_WithError(t *testing.T) {
 	h := server.NewPrivateLocationServer(testDB(), getTBClient(context.Background()))
 
 	req := connect.NewRequest(&private_locationv1.IngestDNSRequest{
-		Id:            "5",
+		Id:            "dns-check-5",
+		MonitorId:     "7",
 		Timestamp:     1234567890,
 		Latency:       0,
 		CronTimestamp: 1234567800,

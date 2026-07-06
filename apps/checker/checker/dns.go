@@ -1,147 +1,263 @@
 package checker
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/rs/zerolog/log"
 )
-
 
 type DnsResponse struct {
 	A     []string `json:"a,omitempty"`
 	AAAA  []string `json:"aaaa,omitempty"`
 	CNAME string   `json:"cname,omitempty"`
 	MX    []string `json:"mx,omitempty"`
-	NS  []string `json:"ns,omitempty"`
-	TXT []string `json:"txt,omitempty"`
+	NS    []string `json:"ns,omitempty"`
+	TXT   []string `json:"txt,omitempty"`
+
+	Timing   Timing `json:"timing"`
+	Resolver string `json:"resolver"`
 }
 
-func Dns(ctx context.Context, host string) (*DnsResponse, error) {
-	log.Info().Str("host", host).Msg("DNS check: starting")
+// dnsRecordResult holds the result of a single DNS record type lookup.
+type dnsRecordResult struct {
+	a     []string
+	aaaa  []string
+	cname string
+	mx    []string
+	ns    []string
+	txt   []string
+	err   error
+	label string
+	start int64
+	done  int64
+}
 
-	log.Info().Str("host", host).Msg("DNS check: looking up A/AAAA records")
-	ips, err := net.LookupIP(host)
-	if err != nil {
-		log.Error().Str("host", host).Err(err).Msg("DNS check: A/AAAA lookup failed")
-		return nil, fmt.Errorf("failed to lookup IPs: %w", err)
+// Dns resolves A, AAAA, CNAME, MX, NS, and TXT records in parallel. Each
+// record-type lookup records its own timing. The response includes the actual
+// DNS server address that resolved the queries.
+func Dns(ctx context.Context, host string) (*DnsResponse, error) {
+	log.Info().Str("host", host).Msg("DNS check: starting parallel lookups")
+
+	// Build a resolver that captures the DNS server address it dials.
+	var resolverAddr string
+	var addrMu sync.Mutex
+
+	resolver := &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+			addrMu.Lock()
+			if resolverAddr == "" {
+				resolverAddr = address
+			}
+			addrMu.Unlock()
+			log.Info().Str("host", host).Str("dns_server", address).Msg("DNS check: dialing resolver")
+			return (&net.Dialer{Timeout: 10 * time.Second}).DialContext(ctx, network, address)
+		},
 	}
 
-	A := []string{}
-	AAAA := []string{}
+	// Also read configured nameservers from /etc/resolv.conf
+	configNS := readResolvConfNameservers()
+	if len(configNS) > 0 {
+		log.Info().Str("host", host).Strs("configured_nameservers", configNS).Msg("DNS check: nameservers from resolv.conf")
+	}
 
-	for _, ip := range ips {
-		if ip.To4() != nil {
-			A = append(A, ip.String())
+	var wg sync.WaitGroup
+	results := make(chan dnsRecordResult, 5)
+
+	// A/AAAA records
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		start := time.Now().UTC().UnixMilli()
+		log.Info().Str("host", host).Msg("DNS check: A/AAAA lookup started")
+		ips, err := resolver.LookupIP(ctx, "ip", host)
+		done := time.Now().UTC().UnixMilli()
+
+		var a, aaaa []string
+		if err == nil {
+			for _, ip := range ips {
+				if ip.To4() != nil {
+					a = append(a, ip.String())
+				} else {
+					aaaa = append(aaaa, ip.String())
+				}
+			}
+			log.Info().Str("host", host).Int("a_count", len(a)).Int("aaaa_count", len(aaaa)).Int64("latency_ms", done-start).Msg("DNS check: A/AAAA resolved")
 		} else {
-			AAAA = append(AAAA, ip.String())
+			log.Error().Str("host", host).Err(err).Int64("latency_ms", done-start).Msg("DNS check: A/AAAA lookup failed")
+		}
+		results <- dnsRecordResult{a: a, aaaa: aaaa, err: err, label: "A/AAAA", start: start, done: done}
+	}()
+
+	// CNAME
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		start := time.Now().UTC().UnixMilli()
+		log.Info().Str("host", host).Msg("DNS check: CNAME lookup started")
+		cname, err := resolver.LookupCNAME(ctx, host)
+		done := time.Now().UTC().UnixMilli()
+		if err != nil {
+			log.Error().Str("host", host).Err(err).Int64("latency_ms", done-start).Msg("DNS check: CNAME lookup failed")
+		} else {
+			log.Info().Str("host", host).Str("cname", cname).Int64("latency_ms", done-start).Msg("DNS check: CNAME resolved")
+		}
+		results <- dnsRecordResult{cname: cname, err: err, label: "CNAME", start: start, done: done}
+	}()
+
+	// MX
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		start := time.Now().UTC().UnixMilli()
+		log.Info().Str("host", host).Msg("DNS check: MX lookup started")
+		mxRecords, err := resolver.LookupMX(ctx, host)
+		done := time.Now().UTC().UnixMilli()
+		var mx []string
+		if err == nil {
+			for _, r := range mxRecords {
+				mx = append(mx, fmt.Sprintf("%s:%d", r.Host, r.Pref))
+			}
+			log.Info().Str("host", host).Int("mx_count", len(mx)).Int64("latency_ms", done-start).Msg("DNS check: MX resolved")
+		} else {
+			log.Error().Str("host", host).Err(err).Int64("latency_ms", done-start).Msg("DNS check: MX lookup failed")
+		}
+		results <- dnsRecordResult{mx: mx, err: err, label: "MX", start: start, done: done}
+	}()
+
+	// NS
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		start := time.Now().UTC().UnixMilli()
+		log.Info().Str("host", host).Msg("DNS check: NS lookup started")
+		var ns []string
+		err := fmt.Errorf("skipped: subdomain")
+		if !isSubdomain(host) {
+			nsRecords, nsErr := resolver.LookupNS(ctx, host)
+			err = nsErr
+			if nsErr == nil {
+				for _, r := range nsRecords {
+					ns = append(ns, r.Host)
+				}
+				log.Info().Str("host", host).Int("ns_count", len(ns)).Int64("latency_ms", time.Now().UTC().UnixMilli()-start).Msg("DNS check: NS resolved")
+			} else {
+				log.Error().Str("host", host).Err(nsErr).Int64("latency_ms", time.Now().UTC().UnixMilli()-start).Msg("DNS check: NS lookup failed")
+			}
+		} else {
+			log.Info().Str("host", host).Msg("DNS check: NS skipped (subdomain)")
+		}
+		done := time.Now().UTC().UnixMilli()
+		results <- dnsRecordResult{ns: ns, err: err, label: "NS", start: start, done: done}
+	}()
+
+	// TXT
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		start := time.Now().UTC().UnixMilli()
+		log.Info().Str("host", host).Msg("DNS check: TXT lookup started")
+		txtRecords, err := resolver.LookupTXT(ctx, host)
+		done := time.Now().UTC().UnixMilli()
+		var txt []string
+		if err == nil {
+			txt = txtRecords
+			log.Info().Str("host", host).Int("txt_count", len(txt)).Int64("latency_ms", done-start).Msg("DNS check: TXT resolved")
+		} else {
+			log.Error().Str("host", host).Err(err).Int64("latency_ms", done-start).Msg("DNS check: TXT lookup failed")
+		}
+		results <- dnsRecordResult{txt: txt, err: err, label: "TXT", start: start, done: done}
+	}()
+
+	// Wait for all goroutines and close the channel
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Collect results
+	response := &DnsResponse{}
+	var earliestStart int64 = 1<<63 - 1
+	var latestDone int64
+
+	for r := range results {
+		if r.start < earliestStart {
+			earliestStart = r.start
+		}
+		if r.done > latestDone {
+			latestDone = r.done
+		}
+
+		switch r.label {
+		case "A/AAAA":
+			response.A = r.a
+			response.AAAA = r.aaaa
+		case "CNAME":
+			response.CNAME = r.cname
+		case "MX":
+			response.MX = r.mx
+		case "NS":
+			response.NS = r.ns
+		case "TXT":
+			response.TXT = r.txt
 		}
 	}
-	log.Info().Str("host", host).Int("a_count", len(A)).Int("aaaa_count", len(AAAA)).Msg("DNS check: A/AAAA resolved")
 
-	log.Info().Str("host", host).Msg("DNS check: looking up CNAME")
-	CNAME, err := lookupCNAME(host)
-	if err != nil {
-		log.Error().Str("host", host).Err(err).Msg("DNS check: CNAME lookup failed")
-		return nil, fmt.Errorf("failed to lookup CNAME record: %w", err)
+	response.Timing = Timing{
+		DnsStart: earliestStart,
+		DnsDone:  latestDone,
 	}
-	log.Info().Str("host", host).Str("cname", CNAME).Msg("DNS check: CNAME resolved")
+	response.Resolver = resolverAddr
 
-	log.Info().Str("host", host).Msg("DNS check: looking up MX records")
-	MXRecords := lookupMX(host)
-	log.Info().Str("host", host).Int("mx_count", len(MXRecords)).Msg("DNS check: MX resolved")
-
-	log.Info().Str("host", host).Msg("DNS check: looking up NS records")
-	NS, err := lookupNS(host)
-	if err != nil {
-		log.Error().Str("host", host).Err(err).Msg("DNS check: NS lookup failed")
-		return nil, fmt.Errorf("failed to lookup NS record: %w", err)
+	// If the custom resolver didn't dial (e.g., cached), fall back to configured NS
+	if response.Resolver == "" && len(configNS) > 0 {
+		response.Resolver = configNS[0]
 	}
-	log.Info().Str("host", host).Int("ns_count", len(NS)).Msg("DNS check: NS resolved")
-
-	log.Info().Str("host", host).Msg("DNS check: looking up TXT records")
-	TXT := lookupTXT(host)
-	log.Info().Str("host", host).Int("txt_count", len(TXT)).Msg("DNS check: TXT resolved")
-
-
-	response := &DnsResponse{
-		A:     A,
-		AAAA:  AAAA,
-		CNAME: CNAME,
-		MX:    MXRecords,
-		NS:    NS,
-		TXT:   TXT,
+	if response.Resolver == "" {
+		response.Resolver = "system"
 	}
 
-	log.Info().Str("host", host).
-		Int("a", len(A)).Int("aaaa", len(AAAA)).
-		Str("cname", CNAME).Int("mx", len(MXRecords)).
-		Int("ns", len(NS)).Int("txt", len(TXT)).
+	log.Info().Str("host", host).Str("resolver", response.Resolver).
+		Int("a", len(response.A)).Int("aaaa", len(response.AAAA)).
+		Str("cname", response.CNAME).Int("mx", len(response.MX)).
+		Int("ns", len(response.NS)).Int("txt", len(response.TXT)).
+		Int64("total_latency_ms", latestDone-earliestStart).
 		Msg("DNS check: complete")
 
 	return response, nil
 }
 
-
-
-func lookupCNAME(domain string) (string, error) {
-	cname, err := net.LookupCNAME(domain)
-	if err != nil {
-		return "", err
-	}
-
-	return cname, nil
-}
-
-func lookupMX(domain string) ([]string) {
-	mx := []string{}
-	mxRecords,_ := net.LookupMX(domain)
-
-
-	for _, r := range mxRecords {
-		mx = append(mx, fmt.Sprintf("%s:%d", r.Host, r.Pref))
-	}
-	return mx
-}
-
-func lookupNS(domain string) ([]string, error) {
-
-	hosts := []string{}
-	isSubdomain := isSubdomain(domain)
-	if isSubdomain {
-		return hosts, nil
-	}
-	nsRecords, err := net.LookupNS(domain)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, ns := range nsRecords {
-		hosts = append(hosts, ns.Host)
-	}
-	return hosts, nil
-}
-
-func lookupTXT(domain string) ([]string) {
-	records := []string{}
-	txtRecords, err := net.LookupTXT(domain)
+// readResolvConfNameservers parses /etc/resolv.conf and returns the configured
+// nameserver addresses.
+func readResolvConfNameservers() []string {
+	f, err := os.Open("/etc/resolv.conf")
 	if err != nil {
 		return nil
 	}
+	defer f.Close()
 
-	for _, txt := range txtRecords {
-		records = append(records, txt)
+	var ns []string
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if strings.HasPrefix(line, "nameserver") {
+			parts := strings.Fields(line)
+			if len(parts) >= 2 {
+				ns = append(ns, parts[1])
+			}
+		}
 	}
-	return records
+	return ns
 }
 
-
+// isSubdomain returns true if the domain has 3+ dot-separated parts.
 func isSubdomain(domain string) bool {
-	parent := strings.Split(domain, ".")
-	if len(parent) < 3 {
-		return false
-	}
-	return true
+	return len(strings.Split(domain, ".")) >= 3
 }

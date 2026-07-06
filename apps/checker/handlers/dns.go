@@ -188,7 +188,7 @@ func (h Handler) DNSHandler(c *gin.Context) {
 		data.RequestStatus = "error"
 		data.Error = 1
 		data.ErrorMessage = err.Error()
-		if req.Status != "error" {
+		if req.Status != "error" && req.UpdatesStatus {
 			checker.UpdateStatus(ctx, checker.UpdateData{
 				MonitorId:     req.MonitorID,
 				Status:        "error",
@@ -199,22 +199,26 @@ func (h Handler) DNSHandler(c *gin.Context) {
 			})
 		}
 	case isSuccessful && req.DegradedAfter > 0 && latency > req.DegradedAfter && req.Status != "degraded":
-		checker.UpdateStatus(ctx, checker.UpdateData{
-			MonitorId:     req.MonitorID,
-			Status:        "degraded",
-			Region:        h.Region,
-			CronTimestamp: req.CronTimestamp,
-			Latency:       latency,
-		})
+		if req.UpdatesStatus {
+			checker.UpdateStatus(ctx, checker.UpdateData{
+				MonitorId:     req.MonitorID,
+				Status:        "degraded",
+				Region:        h.Region,
+				CronTimestamp: req.CronTimestamp,
+				Latency:       latency,
+			})
+		}
 		data.RequestStatus = "degraded"
 	case isSuccessful && ((req.DegradedAfter == 0 && req.Status != "active") || (latency < req.DegradedAfter && req.DegradedAfter != 0 && req.Status != "active")):
-		checker.UpdateStatus(ctx, checker.UpdateData{
-			MonitorId:     req.MonitorID,
-			Status:        "active",
-			Region:        h.Region,
-			CronTimestamp: req.CronTimestamp,
-			Latency:       latency,
-		})
+		if req.UpdatesStatus {
+			checker.UpdateStatus(ctx, checker.UpdateData{
+				MonitorId:     req.MonitorID,
+				Status:        "active",
+				Region:        h.Region,
+				CronTimestamp: req.CronTimestamp,
+				Latency:       latency,
+			})
+		}
 		data.RequestStatus = "success"
 	}
 

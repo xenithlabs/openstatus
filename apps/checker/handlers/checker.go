@@ -203,52 +203,59 @@ func (h Handler) HTTPCheckerHandler(c *gin.Context) {
 		data.Assertions = assertionAsString
 
 		if !isSuccessfull && req.Status != "error" {
-			// Q: Why here we do not check if the status was previously active?
-			checker.UpdateStatus(ctx, checker.UpdateData{
-				MonitorId:     req.MonitorID,
-				Status:        "error",
-				StatusCode:    res.Status,
-				Region:        h.Region,
-				Message:       res.Error,
-				CronTimestamp: req.CronTimestamp,
-				Latency:       res.Latency,
-			})
+			if req.UpdatesStatus {
+				checker.UpdateStatus(ctx, checker.UpdateData{
+					MonitorId:     req.MonitorID,
+					Status:        "error",
+					StatusCode:    res.Status,
+					Region:        h.Region,
+					Message:       res.Error,
+					CronTimestamp: req.CronTimestamp,
+					Latency:       res.Latency,
+				})
+			}
 			data.RequestStatus = "error"
 		}
 		// it's degraded
 		if isSuccessfull && req.DegradedAfter > 0 && res.Latency > req.DegradedAfter && req.Status != "degraded" {
-			checker.UpdateStatus(ctx, checker.UpdateData{
-				MonitorId:     req.MonitorID,
-				Status:        "degraded",
-				Region:        h.Region,
-				StatusCode:    res.Status,
-				CronTimestamp: req.CronTimestamp,
-				Latency:       res.Latency,
-			})
+			if req.UpdatesStatus {
+				checker.UpdateStatus(ctx, checker.UpdateData{
+					MonitorId:     req.MonitorID,
+					Status:        "degraded",
+					Region:        h.Region,
+					StatusCode:    res.Status,
+					CronTimestamp: req.CronTimestamp,
+					Latency:       res.Latency,
+				})
+			}
 			data.RequestStatus = "degraded"
 		}
 		// it's active
 		if isSuccessfull && req.DegradedAfter == 0 && req.Status != "active" {
-			checker.UpdateStatus(ctx, checker.UpdateData{
-				MonitorId:     req.MonitorID,
-				Status:        "active",
-				Region:        h.Region,
-				StatusCode:    res.Status,
-				CronTimestamp: req.CronTimestamp,
-				Latency:       res.Latency,
-			})
+			if req.UpdatesStatus {
+				checker.UpdateStatus(ctx, checker.UpdateData{
+					MonitorId:     req.MonitorID,
+					Status:        "active",
+					Region:        h.Region,
+					StatusCode:    res.Status,
+					CronTimestamp: req.CronTimestamp,
+					Latency:       res.Latency,
+				})
+			}
 			data.RequestStatus = "success"
 		}
 		// it's active
 		if isSuccessfull && res.Latency < req.DegradedAfter && req.DegradedAfter != 0 && req.Status != "active" {
-			checker.UpdateStatus(ctx, checker.UpdateData{
-				MonitorId:     req.MonitorID,
-				Status:        "active",
-				Region:        h.Region,
-				StatusCode:    res.Status,
-				CronTimestamp: req.CronTimestamp,
-				Latency:       res.Latency,
-			})
+			if req.UpdatesStatus {
+				checker.UpdateStatus(ctx, checker.UpdateData{
+					MonitorId:     req.MonitorID,
+					Status:        "active",
+					Region:        h.Region,
+					StatusCode:    res.Status,
+					CronTimestamp: req.CronTimestamp,
+					Latency:       res.Latency,
+				})
+			}
 			data.RequestStatus = "success"
 		}
 
@@ -302,13 +309,15 @@ func (h Handler) HTTPCheckerHandler(c *gin.Context) {
 		}
 
 		if req.Status != "error" {
-			checker.UpdateStatus(ctx, checker.UpdateData{
-				MonitorId:     req.MonitorID,
-				Status:        "error",
-				Message:       err.Error(),
-				Region:        h.Region,
-				CronTimestamp: req.CronTimestamp,
-			})
+			if req.UpdatesStatus {
+				checker.UpdateStatus(ctx, checker.UpdateData{
+					MonitorId:     req.MonitorID,
+					Status:        "error",
+					Message:       err.Error(),
+					Region:        h.Region,
+					CronTimestamp: req.CronTimestamp,
+				})
+			}
 		}
 	}
 

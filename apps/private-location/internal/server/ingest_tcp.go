@@ -38,7 +38,7 @@ func (h *privateLocationHandler) IngestTCP(ctx context.Context, req *connect.Req
 		return nil, NewValidationError(err)
 	}
 
-	ic, err := h.getIngestContext(ctx, token, req.Msg.Id)
+	ic, err := h.getIngestContext(ctx, token, req.Msg.MonitorId)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -69,6 +69,7 @@ func (h *privateLocationHandler) IngestTCP(ctx context.Context, req *connect.Req
 	}
 
 	h.sendEventAndUpdateLastSeen(ctx, data, tinybird.DatasourceTCP, ic.Region.ID)
+	h.updateMonitorStatus(ctx, ic.Monitor, ic.Region.ID, req.Msg.RequestStatus, 0, req.Msg.CronTimestamp, req.Msg.Latency)
 
 	return connect.NewResponse(&private_locationv1.IngestTCPResponse{}), nil
 }

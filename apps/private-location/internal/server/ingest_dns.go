@@ -18,6 +18,7 @@ type DNSResponse struct {
 	Trigger       string `json:"trigger"`
 	URI           string `json:"uri"`
 	RequestStatus string `json:"requestStatus,omitempty"`
+	Assertions    string `json:"assertions"`
 	// JSON-encoded map so Tinybird stores it in the single `records` String
 	// column instead of auto-flattening into quarantined records_* columns.
 	Records string `json:"records"`
@@ -29,7 +30,8 @@ type DNSResponse struct {
 	Latency       int64 `json:"latency"`
 	CronTimestamp int64 `json:"cronTimestamp"`
 
-	Error uint8 `json:"error"`
+	Error    uint8  `json:"error"`
+	Resolver string `json:"resolver"`
 }
 
 func (h *privateLocationHandler) IngestDNS(ctx context.Context, req *connect.Request[private_locationv1.IngestDNSRequest]) (*connect.Response[private_locationv1.IngestDNSResponse], error) {
@@ -42,7 +44,7 @@ func (h *privateLocationHandler) IngestDNS(ctx context.Context, req *connect.Req
 		return nil, NewValidationError(err)
 	}
 
-	ic, err := h.getIngestContext(ctx, token, req.Msg.Id)
+	ic, err := h.getIngestContext(ctx, token, req.Msg.MonitorId)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -84,10 +86,13 @@ func (h *privateLocationHandler) IngestDNS(ctx context.Context, req *connect.Req
 		Trigger:       "cron",
 		URI:           req.Msg.Uri,
 		RequestStatus: req.Msg.RequestStatus,
+		Assertions:    ic.Monitor.Assertions.String,
 		Records:       string(recordsJSON),
+		Resolver:      req.Msg.Resolver,
 	}
 
 	h.sendEventAndUpdateLastSeen(ctx, data, tinybird.DatasourceDNS, ic.Region.ID)
+	h.updateMonitorStatus(ctx, ic.Monitor, ic.Region.ID, req.Msg.RequestStatus, 0, req.Msg.CronTimestamp, req.Msg.Latency)
 
 	return connect.NewResponse(&private_locationv1.IngestDNSResponse{}), nil
 }

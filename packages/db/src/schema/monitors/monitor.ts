@@ -56,6 +56,12 @@ export const monitor = sqliteTable(
       true,
     ),
 
+    // When false, the checker/probe only reports metrics to Tinybird but does
+    // not call UpdateStatus — the monitor status is managed externally.
+    updatesStatus: integer("updates_status", { mode: "boolean" }).default(
+      true,
+    ),
+
     createdAt: integer("created_at", { mode: "timestamp" }).default(
       sql`(strftime('%s', 'now'))`,
     ),

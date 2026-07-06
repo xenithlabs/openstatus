@@ -79,6 +79,7 @@ func (h *privateLocationHandler) IngestHTTP(ctx context.Context, req *connect.Re
 	}
 
 	h.sendEventAndUpdateLastSeen(ctx, data, tinybird.DatasourceHTTP, ic.Region.ID)
+	h.updateMonitorStatus(ctx, ic.Monitor, ic.Region.ID, req.Msg.RequestStatus, int(req.Msg.StatusCode), req.Msg.CronTimestamp, req.Msg.Latency)
 
 	return connect.NewResponse(&private_locationv1.IngestHTTPResponse{}), nil
 }

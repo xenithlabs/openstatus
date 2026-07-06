@@ -38,6 +38,7 @@ type Monitor struct {
 	Regions         string         `db:"regions" json:"-"`
 	Status          string         `db:"status" json:"-"`
 	Public          bool           `db:"public" json:"-"`
+	UpdatesStatus   bool           `db:"updates_status"`
 }
 
 type PrivateLocation struct {

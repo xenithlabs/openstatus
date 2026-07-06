@@ -250,9 +250,11 @@ func TestRecordTCPMetrics_Success(t *testing.T) {
 
 	result := checker.TCPResponse{
 		Latency: 45,
-		Timing: checker.TCPResponseTiming{
-			TCPStart: 0,
-			TCPDone:  45,
+		Timing: checker.Timing{
+			DnsStart:     0,
+			DnsDone:      5,
+			ConnectStart: 5,
+			ConnectDone:  45,
 		},
 	}
 

@@ -115,12 +115,12 @@ func (h Handler) TCPHandler(c *gin.Context) {
 			return fmt.Errorf("unable to check tcp %s", err)
 		}
 
-		timingAsString, err := json.Marshal(res)
+		timingAsString, err := json.Marshal(res.Timing)
 		if err != nil {
 			return fmt.Errorf("error while parsing timing data %s: %w", req.URI, err)
 		}
 
-		latency := res.TCPDone - res.TCPStart
+		latency := res.Timing.ConnectDone - res.Timing.DnsStart
 
 		var requestStatus = ""
 		switch req.Status {
@@ -128,7 +128,6 @@ func (h Handler) TCPHandler(c *gin.Context) {
 			requestStatus = "success"
 		case "error":
 			requestStatus = "error"
-
 		case "degraded":
 			requestStatus = "degraded"
 		}
@@ -141,7 +140,7 @@ func (h Handler) TCPHandler(c *gin.Context) {
 		data := TCPData{
 			ID:            id.String(),
 			WorkspaceID:   workspaceId,
-			Timestamp:     res.TCPStart,
+			Timestamp:     res.Timing.DnsStart,
 			Error:         0,
 			ErrorMessage:  "",
 			Region:        h.Region,
@@ -155,51 +154,53 @@ func (h Handler) TCPHandler(c *gin.Context) {
 		}
 
 		response = checker.TCPResponse{
-			State:     "success",
-			Type:      "tcp",
-			Timestamp: res.TCPStart,
-			Timing: checker.TCPResponseTiming{
-				TCPStart: res.TCPStart,
-				TCPDone:  res.TCPDone,
-			},
-			Latency: latency,
-			Region:  h.Region,
-			JobType: "tcp",
+			State:      "success",
+			Type:       "tcp",
+			Timestamp:  res.Timing.DnsStart,
+			Timing:     res.Timing,
+			ResolvedIP: res.ResolvedIP,
+			Latency:    latency,
+			Region:     h.Region,
+			JobType:    "tcp",
 		}
 
 		if req.DegradedAfter == 0 && req.Status != "active" {
-			checker.UpdateStatus(ctx, checker.UpdateData{
-				MonitorId:     req.MonitorID,
-				Status:        "active",
-				Region:        h.Region,
-				CronTimestamp: req.CronTimestamp,
-				Latency:       latency,
-			})
+			if req.UpdatesStatus {
+				checker.UpdateStatus(ctx, checker.UpdateData{
+					MonitorId:     req.MonitorID,
+					Status:        "active",
+					Region:        h.Region,
+					CronTimestamp: req.CronTimestamp,
+					Latency:       latency,
+				})
+			}
 			data.RequestStatus = "success"
 		}
 
 		if (req.DegradedAfter > 0 && latency < req.DegradedAfter) && req.Status != "active" {
-			checker.UpdateStatus(ctx, checker.UpdateData{
-				MonitorId:     req.MonitorID,
-				Status:        "active",
-				Region:        h.Region,
-				CronTimestamp: req.CronTimestamp,
-				Latency:       latency,
-			})
+			if req.UpdatesStatus {
+				checker.UpdateStatus(ctx, checker.UpdateData{
+					MonitorId:     req.MonitorID,
+					Status:        "active",
+					Region:        h.Region,
+					CronTimestamp: req.CronTimestamp,
+					Latency:       latency,
+				})
+			}
 			data.RequestStatus = "success"
-
 		}
 
 		if req.DegradedAfter > 0 && latency > req.DegradedAfter && req.Status != "degraded" {
-			checker.UpdateStatus(ctx, checker.UpdateData{
-				MonitorId:     req.MonitorID,
-				Status:        "degraded",
-				Region:        h.Region,
-				CronTimestamp: req.CronTimestamp,
-				Latency:       latency,
-			})
+			if req.UpdatesStatus {
+				checker.UpdateStatus(ctx, checker.UpdateData{
+					MonitorId:     req.MonitorID,
+					Status:        "degraded",
+					Region:        h.Region,
+					CronTimestamp: req.CronTimestamp,
+					Latency:       latency,
+				})
+			}
 			data.RequestStatus = "degraded"
-
 		}
 
 		if err := h.TbClient.SendEvent(ctx, data, dataSourceName); err != nil {
@@ -231,13 +232,15 @@ func (h Handler) TCPHandler(c *gin.Context) {
 		if err := h.TbClient.SendEvent(ctx, data, dataSourceName); err != nil {
 			log.Ctx(ctx).Error().Err(err).Msg("failed to send event to tinybird")
 		}
-		checker.UpdateStatus(ctx, checker.UpdateData{
-			MonitorId:     req.MonitorID,
-			Status:        "error",
-			Message:       err.Error(),
-			Region:        h.Region,
-			CronTimestamp: req.CronTimestamp,
-		})
+		if req.UpdatesStatus {
+			checker.UpdateStatus(ctx, checker.UpdateData{
+				MonitorId:     req.MonitorID,
+				Status:        "error",
+				Message:       err.Error(),
+				Region:        h.Region,
+				CronTimestamp: req.CronTimestamp,
+			})
+		}
 
 	}
 
@@ -302,28 +305,26 @@ func (h Handler) TCPHandlerRegion(c *gin.Context) {
 		}
 
 		response = checker.TCPResponse{
-			State:     "success",
-			Type:      "tcp",
-			Timestamp: timestamp,
-			Timing: checker.TCPResponseTiming{
-				TCPStart: res.TCPStart,
-				TCPDone:  res.TCPDone,
-			},
-			Latency: res.TCPDone - res.TCPStart,
-			Region:  h.Region,
-			JobType: "tcp",
+			State:      "success",
+			Type:       "tcp",
+			Timestamp:  timestamp,
+			Timing:     res.Timing,
+			ResolvedIP: res.ResolvedIP,
+			Latency:    res.Timing.ConnectDone - res.Timing.DnsStart,
+			Region:     h.Region,
+			JobType:    "tcp",
 		}
 
-		timingAsString, err := json.Marshal(res)
+		timingAsString, err := json.Marshal(res.Timing)
 		if err != nil {
 			return fmt.Errorf("error while parsing timing data %s: %w", req.URI, err)
 		}
 
-		latency := res.TCPDone - res.TCPStart
+		latency := res.Timing.ConnectDone - res.Timing.DnsStart
 
 		data := TCPData{
 			CronTimestamp: req.CronTimestamp,
-			Timestamp:     res.TCPStart,
+			Timestamp:     res.Timing.DnsStart,
 			Error:         0,
 			ErrorMessage:  "",
 			Region:        h.Region,

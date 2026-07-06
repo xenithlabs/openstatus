@@ -56,6 +56,7 @@ export const selectMonitorSchema = createSelectSchema(monitor, {
   followRedirects: booleanFromSqlite.prefault(true),
   retry: z.number().prefault(3),
   regions: regionsToArraySchema.prefault([]),
+  updatesStatus: booleanFromSqlite.prefault(true),
 }).extend({
   headers: headersToArraySchema.prefault([]),
   otelHeaders: headersToArraySchema.prefault([]),

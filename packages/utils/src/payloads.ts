@@ -24,6 +24,7 @@ export const httpPayloadSchema = z.object({
     .optional(),
   retry: z.number().prefault(3),
   followRedirects: z.boolean().prefault(true),
+  updatesStatus: z.boolean().prefault(true),
 });
 
 export type HttpPayload = z.infer<typeof httpPayloadSchema>;
@@ -45,6 +46,7 @@ export const tpcPayloadSchema = z.object({
     })
     .optional(),
   retry: z.number().prefault(3),
+  updatesStatus: z.boolean().prefault(true),
 });
 
 export type TcpPayload = z.infer<typeof tpcPayloadSchema>;
@@ -66,6 +68,7 @@ export const DNSPayloadSchema = z.object({
     })
     .optional(),
   retry: z.number().prefault(3),
+  updatesStatus: z.boolean().prefault(true),
 });
 
 export type DNSPayload = z.infer<typeof DNSPayloadSchema>;

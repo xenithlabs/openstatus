@@ -84,6 +84,7 @@ type HttpCheckerRequest struct {
 	DegradedAfter   int64             `json:"degradedAfter,omitempty"`
 	Retry           int64             `json:"retry,omitempty"`
 	FollowRedirects bool              `json:"followRedirects,omitempty"`
+	UpdatesStatus   bool              `json:"updatesStatus"`
 	OtelConfig      struct {
 		Endpoint string            `json:"endpoint"`
 		Headers  map[string]string `json:"headers,omitempty"`
@@ -102,6 +103,7 @@ type TCPCheckerRequest struct {
 	Timeout       int64             `json:"timeout"`
 	DegradedAfter int64             `json:"degradedAfter,omitempty"`
 	Retry         int64             `json:"retry,omitempty"`
+	UpdatesStatus bool              `json:"updatesStatus"`
 	OtelConfig    struct {
 		Endpoint string            `json:"endpoint"`
 		Headers  map[string]string `json:"headers,omitempty"`
@@ -137,6 +139,7 @@ type DNSCheckerRequest struct {
 	Timeout       int64             `json:"timeout"`
 	DegradedAfter int64             `json:"degradedAfter,omitempty"`
 	Retry         int64             `json:"retry,omitempty"`
+	UpdatesStatus bool              `json:"updatesStatus"`
 	OtelConfig    struct {
 		Endpoint string            `json:"endpoint"`
 		Headers  map[string]string `json:"headers,omitempty"`

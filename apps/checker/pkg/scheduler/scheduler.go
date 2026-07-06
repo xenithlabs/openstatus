@@ -133,6 +133,7 @@ func (mm *MonitorManager) UpdateMonitors(ctx context.Context) {
 							Error:         int64(data.Error),
 							CronTimestamp: data.CronTimestamp,
 							Timestamp:     data.Timestamp,
+							Timing:        data.Timing,
 						},
 					})
 					if ingestErr != nil {

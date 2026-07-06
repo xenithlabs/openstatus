@@ -29,6 +29,7 @@ import {
   updateMonitorRetry,
   updateMonitorSchedulingRegions,
   updateMonitorTags,
+  updateMonitorUpdatesStatus,
 } from "@openstatus/services/monitor";
 import { z } from "zod";
 
@@ -198,6 +199,23 @@ export const monitorRouter = createTRPCRouter({
           input: {
             id: input.id,
             followRedirects: input.followRedirects,
+          },
+        });
+      } catch (err) {
+        toTRPCError(err);
+      }
+    }),
+
+  updateUpdatesStatus: protectedProcedure
+    .meta({ track: Events.UpdateMonitor })
+    .input(z.object({ id: z.number(), updatesStatus: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        await updateMonitorUpdatesStatus({
+          ctx: toServiceCtx(ctx),
+          input: {
+            id: input.id,
+            updatesStatus: input.updatesStatus,
           },
         });
       } catch (err) {

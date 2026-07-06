@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/cenkalti/backoff/v5"
 	"github.com/google/uuid"
@@ -14,16 +13,16 @@ import (
 )
 
 type DNSPrivateRegionData struct {
-	ID            string                `json:"id"`
-	URI           string                `json:"uri"`
-	Latency       int64                 `json:"latency"`
-	Timestamp     int64                 `json:"timestamp"`
-	CronTimestamp int64                 `json:"cronTimestamp"`
-	RequestStatus string                `json:"requestStatus"`
-	Message       string                `json:"message"`
-	Error         int                   `json:"error"`
-	Timing        string                `json:"timing"`
-	Records       map[string][]string   `json:"records"`
+	ID            string              `json:"id"`
+	URI           string              `json:"uri"`
+	Latency       int64               `json:"latency"`
+	Timestamp     int64               `json:"timestamp"`
+	CronTimestamp int64               `json:"cronTimestamp"`
+	RequestStatus string              `json:"requestStatus"`
+	Message       string              `json:"message"`
+	Error         int                 `json:"error"`
+	Timing        string              `json:"timing"`
+	Records       map[string][]string `json:"records"`
 }
 
 func (jobRunner) DNSJob(ctx context.Context, monitor *v1.DNSMonitor) (*DNSPrivateRegionData, error) {
@@ -44,9 +43,7 @@ func (jobRunner) DNSJob(ctx context.Context, monitor *v1.DNSMonitor) (*DNSPrivat
 	op := func() (*DNSPrivateRegionData, error) {
 		called++
 		log.Info().Str("monitor_id", monitor.Id).Str("uri", monitor.Uri).Int("attempt", called).Int("max_attempts", int(retry)).Msg("DNS job: running check")
-		start := time.Now().UTC().UnixMilli()
 		res, err := checker.Dns(ctx, monitor.Uri)
-		latency := time.Now().UTC().UnixMilli() - start
 
 		id, uuidErr := uuid.NewV7()
 		if uuidErr != nil {
@@ -60,20 +57,17 @@ func (jobRunner) DNSJob(ctx context.Context, monitor *v1.DNSMonitor) (*DNSPrivat
 			return &DNSPrivateRegionData{
 				ID:            id.String(),
 				URI:           monitor.Uri,
-				Latency:       latency,
-				Timestamp:     start,
-				CronTimestamp: start,
+				Latency:       0,
+				Timestamp:     res.Timing.DnsStart,
+				CronTimestamp: res.Timing.DnsStart,
 				RequestStatus: "error",
 				Error:         1,
 				Message:       err.Error(),
 			}, nil
 		}
 
-		timing := map[string]int64{
-			"dnsStart": start,
-			"dnsDone":  start + latency,
-		}
-		timingBytes, _ := json.Marshal(timing)
+		latency := res.Timing.DnsDone - res.Timing.DnsStart
+		timingBytes, _ := json.Marshal(res.Timing)
 
 		records := formatDNSRecords(res)
 
@@ -82,14 +76,16 @@ func (jobRunner) DNSJob(ctx context.Context, monitor *v1.DNSMonitor) (*DNSPrivat
 			requestStatus = "degraded"
 		}
 
+		log.Info().Str("monitor_id", monitor.Id).Str("uri", monitor.Uri).Str("resolver", res.Resolver).Int64("latency_ms", latency).Str("timing", string(timingBytes)).Msg("DNS job: check successful")
+
 		return &DNSPrivateRegionData{
 			ID:            id.String(),
 			URI:           monitor.Uri,
 			Latency:       latency,
-			Timestamp:     start,
-			CronTimestamp: start,
+			Timestamp:     res.Timing.DnsStart,
+			CronTimestamp: res.Timing.DnsStart,
 			RequestStatus: requestStatus,
-			Message:       fmt.Sprintf("DNS lookup succeeded for %s", monitor.Uri),
+			Message:       fmt.Sprintf("DNS lookup succeeded for %s (resolver: %s)", monitor.Uri, res.Resolver),
 			Timing:        string(timingBytes),
 			Records:       records,
 		}, nil

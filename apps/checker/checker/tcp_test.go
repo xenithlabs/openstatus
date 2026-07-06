@@ -14,10 +14,9 @@ func TestPingTcp(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    checker.TCPResponseTiming
 		wantErr bool
 	}{
-		{name: "will failed", args: args{url: "error", timeout: 60}, wantErr: true},
+		{name: "will fail", args: args{url: "error:80", timeout: 1}, wantErr: true},
 		{name: "will be ok", args: args{url: "openstat.us:443", timeout: 60}, wantErr: false},
 	}
 	for _, tt := range tests {
@@ -27,15 +26,18 @@ func TestPingTcp(t *testing.T) {
 				t.Errorf("PingTcp() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if got.TCPStart == 0 && tt.wantErr == false {
-				t.Errorf("PingTcp() = %v", got)
+			if !tt.wantErr && got == nil {
+				t.Errorf("PingTcp() = nil")
 				return
 			}
-			if got.TCPDone == 0 && tt.wantErr == false {
-				t.Errorf("PingTcp() = %v", got)
-				return
+			if !tt.wantErr {
+				if got.Timing.DnsStart == 0 {
+					t.Errorf("PingTcp() timing.DnsStart = 0")
+				}
+				if got.Timing.ConnectDone == 0 {
+					t.Errorf("PingTcp() timing.ConnectDone = 0")
+				}
 			}
-
 		})
 	}
 }

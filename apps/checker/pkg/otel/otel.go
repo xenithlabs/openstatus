@@ -162,7 +162,8 @@ func RecordTCPMetrics(ctx context.Context, req request.TCPCheckerRequest, result
 			value       float64
 		}{
 			{"openstatus.tcp.request.duration", "Duration of the check", float64(result.Latency)},
-			{"openstatus.tcp.tcp.duration", "Duration of the TCP connection", float64(result.Timing.TCPDone - result.Timing.TCPStart)},
+			{"openstatus.tcp.dns.duration", "Duration of DNS resolution", float64(result.Timing.DnsDone - result.Timing.DnsStart)},
+			{"openstatus.tcp.connect.duration", "Duration of TCP connect", float64(result.Timing.ConnectDone - result.Timing.ConnectStart)},
 		}
 
 		for _, t := range timings {

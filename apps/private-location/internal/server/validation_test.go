@@ -90,6 +90,7 @@ func TestValidateIngestTCPRequest(t *testing.T) {
 			name: "valid request",
 			req: &private_locationv1.IngestTCPRequest{
 				Id:        "tcp-123",
+				MonitorId: "6",
 				Latency:   100,
 				Timestamp: 1234567890,
 			},
@@ -99,6 +100,7 @@ func TestValidateIngestTCPRequest(t *testing.T) {
 			name: "valid request with zero latency",
 			req: &private_locationv1.IngestTCPRequest{
 				Id:        "tcp-123",
+				MonitorId: "6",
 				Latency:   0,
 				Timestamp: 1234567890,
 			},
@@ -108,15 +110,27 @@ func TestValidateIngestTCPRequest(t *testing.T) {
 			name: "empty id",
 			req: &private_locationv1.IngestTCPRequest{
 				Id:        "",
+				MonitorId: "6",
 				Latency:   100,
 				Timestamp: 1234567890,
 			},
 			wantErr: server.ErrEmptyID,
 		},
 		{
+			name: "empty monitor_id",
+			req: &private_locationv1.IngestTCPRequest{
+				Id:        "tcp-123",
+				MonitorId: "",
+				Latency:   100,
+				Timestamp: 1234567890,
+			},
+			wantErr: server.ErrEmptyMonitorID,
+		},
+		{
 			name: "negative latency",
 			req: &private_locationv1.IngestTCPRequest{
 				Id:        "tcp-123",
+				MonitorId: "6",
 				Latency:   -1,
 				Timestamp: 1234567890,
 			},
@@ -126,6 +140,7 @@ func TestValidateIngestTCPRequest(t *testing.T) {
 			name: "zero timestamp",
 			req: &private_locationv1.IngestTCPRequest{
 				Id:        "tcp-123",
+				MonitorId: "6",
 				Latency:   100,
 				Timestamp: 0,
 			},
@@ -135,6 +150,7 @@ func TestValidateIngestTCPRequest(t *testing.T) {
 			name: "negative timestamp",
 			req: &private_locationv1.IngestTCPRequest{
 				Id:        "tcp-123",
+				MonitorId: "6",
 				Latency:   100,
 				Timestamp: -1,
 			},
@@ -162,6 +178,7 @@ func TestValidateIngestDNSRequest(t *testing.T) {
 			name: "valid request",
 			req: &private_locationv1.IngestDNSRequest{
 				Id:        "dns-123",
+				MonitorId: "7",
 				Latency:   100,
 				Timestamp: 1234567890,
 			},
@@ -171,6 +188,7 @@ func TestValidateIngestDNSRequest(t *testing.T) {
 			name: "valid request with zero latency",
 			req: &private_locationv1.IngestDNSRequest{
 				Id:        "dns-123",
+				MonitorId: "7",
 				Latency:   0,
 				Timestamp: 1234567890,
 			},
@@ -180,15 +198,27 @@ func TestValidateIngestDNSRequest(t *testing.T) {
 			name: "empty id",
 			req: &private_locationv1.IngestDNSRequest{
 				Id:        "",
+				MonitorId: "7",
 				Latency:   100,
 				Timestamp: 1234567890,
 			},
 			wantErr: server.ErrEmptyID,
 		},
 		{
+			name: "empty monitor_id",
+			req: &private_locationv1.IngestDNSRequest{
+				Id:        "dns-123",
+				MonitorId: "",
+				Latency:   100,
+				Timestamp: 1234567890,
+			},
+			wantErr: server.ErrEmptyMonitorID,
+		},
+		{
 			name: "negative latency",
 			req: &private_locationv1.IngestDNSRequest{
 				Id:        "dns-123",
+				MonitorId: "7",
 				Latency:   -1,
 				Timestamp: 1234567890,
 			},
@@ -198,6 +228,7 @@ func TestValidateIngestDNSRequest(t *testing.T) {
 			name: "zero timestamp",
 			req: &private_locationv1.IngestDNSRequest{
 				Id:        "dns-123",
+				MonitorId: "7",
 				Latency:   100,
 				Timestamp: 0,
 			},
@@ -207,6 +238,7 @@ func TestValidateIngestDNSRequest(t *testing.T) {
 			name: "negative timestamp",
 			req: &private_locationv1.IngestDNSRequest{
 				Id:        "dns-123",
+				MonitorId: "7",
 				Latency:   100,
 				Timestamp: -1,
 			},

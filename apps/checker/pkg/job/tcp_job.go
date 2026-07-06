@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/cenkalti/backoff/v5"
 	"github.com/google/uuid"
@@ -11,13 +12,6 @@ import (
 	v1 "github.com/openstatushq/openstatus/apps/checker/proto/private_location/v1"
 	"github.com/rs/zerolog/log"
 )
-
-// AssertionResult tracks the results of running assertions
-type AssertionResult struct {
-	Type    string
-	Success bool
-	Message string
-}
 
 // TCPPrivateRegionData represents the result of a TCP monitor check
 type TCPPrivateRegionData struct {
@@ -31,8 +25,6 @@ type TCPPrivateRegionData struct {
 	Error         int    `json:"error"`
 	Timing        string `json:"timing"`
 }
-
-// runAssertions performs all configured assertions for TCP and returns their results
 
 func (jobRunner) TCPJob(ctx context.Context, monitor *v1.TCPMonitor) (*TCPPrivateRegionData, error) {
 	log.Info().Str("monitor_id", monitor.Id).Str("uri", monitor.Uri).Msg("TCP job: starting")
@@ -57,17 +49,17 @@ func (jobRunner) TCPJob(ctx context.Context, monitor *v1.TCPMonitor) (*TCPPrivat
 			if called < int(retry) {
 				return nil, fmt.Errorf("TCP connection failed: %w", err)
 			}
-			// On final attempt, return the error in the result
 			id, uuidErr := uuid.NewV7()
 			if uuidErr != nil {
 				return nil, fmt.Errorf("failed to generate UUID: %w", uuidErr)
 			}
 
+			now := time.Now().UTC().UnixMilli()
 			return &TCPPrivateRegionData{
 				ID:            id.String(),
 				Latency:       0,
-				Timestamp:     res.TCPStart,
-				CronTimestamp: res.TCPStart,
+				Timestamp:     now,
+				CronTimestamp: now,
 				URI:           monitor.Uri,
 				RequestStatus: "error",
 				Error:         1,
@@ -75,10 +67,9 @@ func (jobRunner) TCPJob(ctx context.Context, monitor *v1.TCPMonitor) (*TCPPrivat
 			}, nil
 		}
 
-		latency := res.TCPDone - res.TCPStart
+		latency := res.Timing.ConnectDone - res.Timing.DnsStart
 
-		var requestStatus = "active"
-
+		requestStatus := "success"
 		if degradedAfter > 0 && latency > degradedAfter {
 			requestStatus = "degraded"
 		}
@@ -87,24 +78,25 @@ func (jobRunner) TCPJob(ctx context.Context, monitor *v1.TCPMonitor) (*TCPPrivat
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate UUID: %w", err)
 		}
-		timingAsString, err := json.Marshal(res)
+		timingBytes, err := json.Marshal(res.Timing)
 		if err != nil {
-			return nil, fmt.Errorf("error while parsing timing data %s: %w", monitor.Uri, err)
+			return nil, fmt.Errorf("error encoding timing: %w", err)
 		}
 
-		data := &TCPPrivateRegionData{
+		msg := fmt.Sprintf("Connected to %s (%s)", monitor.Uri, res.ResolvedIP)
+		log.Info().Str("monitor_id", monitor.Id).Str("uri", monitor.Uri).Str("ip", res.ResolvedIP).Int64("latency_ms", latency).Str("status", requestStatus).Str("timing", string(timingBytes)).Msg("TCP job: check successful")
+
+		return &TCPPrivateRegionData{
 			ID:            id.String(),
 			Latency:       latency,
-			Timestamp:     res.TCPStart,
-			CronTimestamp: res.TCPStart,
+			Timestamp:     res.Timestamp,
+			CronTimestamp: res.Timestamp,
 			URI:           monitor.Uri,
 			RequestStatus: requestStatus,
 			Error:         0,
-			Message:       fmt.Sprintf("Successfully connected to %s", monitor.Uri),
-			Timing:        string(timingAsString),
-		}
-
-		return data, nil
+			Message:       msg,
+			Timing:        string(timingBytes),
+		}, nil
 	}
 
 	resp, err := backoff.Retry(ctx, op,

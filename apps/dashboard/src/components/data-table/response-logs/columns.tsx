@@ -108,7 +108,7 @@ export function getColumns(
       header: "Timing",
       cell: ({ row }) => {
         const log = row.original;
-        if (log.type === "http" && log.timing) {
+        if (log.timing) {
           return <HoverCardTiming timing={log.timing} latency={log.latency} />;
         }
         return <div className="text-muted-foreground">-</div>;

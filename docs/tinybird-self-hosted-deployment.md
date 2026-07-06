@@ -51,7 +51,7 @@ Then restart the dependent services:
 docker compose restart server dashboard status-page private-location
 ```
 
-> **Re-running:** The script is idempotent — it drops existing resources before pushing so schema changes are applied cleanly. To skip token extraction on re-run:
+> **Re-running:** The script is idempotent — it uses `tb push --force` which handles idempotent re-push cleanly. To skip token extraction on re-run:
 > ```sh
 > TB_TOKEN="p.eyJ1..." ./scripts/tinybird-self-hosted-init.sh
 > ```
@@ -251,7 +251,7 @@ This means the script ran pipes before datasources. The init script handles orde
 
 ### Schema migration conflicts on re-run
 
-The init script cleans up existing resources before pushing to avoid migration conflicts. If you encounter errors like "the migration can't be executed to match the new definition", a `.datasource` file and its `__v0` snapshot have mismatched schemas (notably `tcp_response.datasource` must match `tcp_response__v0.datasource` — both 13 columns). This is fixed in the repo; if upgrading from an older checkout, verify the two files match.
+If you encounter errors like "the migration can't be executed to match the new definition", a `.datasource` file and its `__v0` snapshot have mismatched schemas (notably `tcp_response.datasource` must match `tcp_response__v0.datasource`). This is fixed in the repo; if upgrading from an older checkout, verify the two files match. Run the init script again — `tb push --force` will apply schema changes.
 
 ### Empty analytics after deployment
 
@@ -270,6 +270,11 @@ The init script cleans up existing resources before pushing to avoid migration c
        "http://tinybird-local:7181/v0/pipes/endpoint__http_list_1d__v1.json?monitorId=1"
    ```
    If it returns `[]`, there's simply no monitoring data yet. Wait for a check cycle to complete.
+
+5. **DNS monitor shows blank logs/overview while HTTP/TCP work:** Verify the `private-location` service includes the `resolver` field in its Tinybird events. The `dns_response__v0` datasource requires a non-nullable `resolver String` column — if the ingest handler omits it, events are silently dropped (HTTP 202 accepted, but rows never stored). Rebuild the service after any fix:
+   ```sh
+   docker compose up -d --build private-location
+   ```
 
 ### Lost admin token
 

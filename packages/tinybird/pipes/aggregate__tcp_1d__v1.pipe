@@ -13,7 +13,8 @@ SQL >
         cronTimestamp,
         monitorId,
         requestStatus,
-        id
+        id,
+        timing
     FROM tcp_response__v0
 
 TYPE materialized

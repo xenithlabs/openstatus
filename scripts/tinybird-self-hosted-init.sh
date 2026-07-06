@@ -164,8 +164,8 @@ deploy_project() {
     log_info "Pushing Tinybird project from $PROJECT_DIR..."
     log_info "Target: $TB_URL"
 
-    local deploy_output deploy_exit
-    deploy_output=$(docker run --rm \
+    local deploy_exit=0
+    docker run --rm \
         --network "$NETWORK" \
         -v "${PROJECT_DIR_ABS}:/project" \
         -w /project \
@@ -178,40 +178,24 @@ deploy_project() {
             echo 'CLI version:' \$(tb --version 2>&1 || echo 'unknown')
 
             echo '==> Authenticating...'
-            tb auth --host '$TB_URL' --token '$token'
-
-            echo '==> Cleaning up any existing resources (idempotent re-run)...'
-            # Drop materialized views first (depend on datasources)
-            for pipe in \$(tb pipe ls 2>/dev/null | awk '/^\\|/ && !/version/ {print \$2}' | grep -v '^endpoint__'); do
-                echo '  Dropping pipe:' \$pipe
-                tb pipe rm \$pipe --yes 2>&1 || true
-            done
-            # Then drop datasources
-            for ds in \$(tb datasource ls 2>/dev/null | grep '^name:' | awk '{print \$2}'); do
-                echo '  Dropping datasource:' \$ds
-                tb datasource rm \$ds --yes 2>&1 || true
-            done
+            TB_VERSION_WARNING=0 tb auth --host '$TB_URL' --token '$token'
 
             echo '==> Pushing datasources...'
-            tb push datasources/ --force --yes
+            TB_VERSION_WARNING=0 tb push datasources/ --force --yes
 
             echo '==> Pushing pipes...'
-            tb push pipes/ --force --yes
+            TB_VERSION_WARNING=0 tb push pipes/ --force --yes
 
             echo '==> Waiting for materialized views...'
             sleep 5
 
             echo '==> Pushing endpoints...'
-            tb push endpoints/ --force --yes
+            TB_VERSION_WARNING=0 tb push endpoints/ --force --yes --no-check
 
             echo '==> Deployment complete.'
-        " 2>&1) || deploy_exit=$?
+        " 2>&1 || deploy_exit=$?
 
-    echo "$deploy_output" | while IFS= read -r line; do
-        echo "  $line"
-    done
-
-    if [ "${deploy_exit:-0}" -ne 0 ]; then
+    if [ "$deploy_exit" -ne 0 ]; then
         log_error "Deployment failed (exit code: $deploy_exit)."
         exit 1
     fi

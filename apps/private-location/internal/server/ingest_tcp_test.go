@@ -32,10 +32,12 @@ func TestIngestTCP_Unauthenticated(t *testing.T) {
 func TestIngestTCP_DBError(t *testing.T) {
 	h := server.NewPrivateLocationServer(testDB(), tinybird.NewClient(http.DefaultClient, ""))
 
-	req := connect.NewRequest(&private_locationv1.IngestTCPRequest{})
-	req.Header().Set("openstatus-token", "token123")
-	req.Msg.Id = "monitor1"
-	req.Msg.Timestamp = 1234567890
+	req := connect.NewRequest(&private_locationv1.IngestTCPRequest{
+		Id:        "tcp-check-1",
+		MonitorId: "999",
+		Timestamp: 1234567890,
+	})
+	req.Header().Set("openstatus-token", "invalid-token")
 	resp, err := h.IngestTCP(context.Background(), req)
 	if err == nil {
 		t.Fatalf("expected error for db failure, got nil")
@@ -116,7 +118,8 @@ func TestIngestTCP_MonitorNotExist(t *testing.T) {
 	h := server.NewPrivateLocationServer(testDB(), tinybird.NewClient(http.DefaultClient, ""))
 
 	req := connect.NewRequest(&private_locationv1.IngestTCPRequest{
-		Id:        "nonexistent-monitor",
+		Id:        "tcp-check-2",
+		MonitorId: "999",
 		Timestamp: 1234567890,
 	})
 	req.Header().Set("openstatus-token", "my-secret-key")
@@ -137,7 +140,8 @@ func TestIngestTCP_MonitorExist(t *testing.T) {
 	h := server.NewPrivateLocationServer(testDB(), getTBClient(context.Background()))
 
 	req := connect.NewRequest(&private_locationv1.IngestTCPRequest{
-		Id:            "5",
+		Id:            "tcp-check-3",
+		MonitorId:     "6",
 		Timestamp:     1234567890,
 		Latency:       50,
 		CronTimestamp: 1234567800,
@@ -159,7 +163,8 @@ func TestIngestTCP_WithError(t *testing.T) {
 	h := server.NewPrivateLocationServer(testDB(), getTBClient(context.Background()))
 
 	req := connect.NewRequest(&private_locationv1.IngestTCPRequest{
-		Id:            "5",
+		Id:            "tcp-check-4",
+		MonitorId:     "6",
 		Timestamp:     1234567890,
 		Latency:       0,
 		CronTimestamp: 1234567800,

@@ -72,6 +72,14 @@ export type UpdateMonitorFollowRedirectsInput = z.infer<
   typeof UpdateMonitorFollowRedirectsInput
 >;
 
+export const UpdateMonitorUpdatesStatusInput = z.object({
+  id: z.number().int(),
+  updatesStatus: z.boolean(),
+});
+export type UpdateMonitorUpdatesStatusInput = z.infer<
+  typeof UpdateMonitorUpdatesStatusInput
+>;
+
 export const UpdateMonitorOtelInput = z.object({
   id: z.number().int(),
   otelEndpoint: z.string(),

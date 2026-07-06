@@ -101,6 +101,23 @@ const app = new Hono<Env>({ strict: false });
 
 app.use("*", requestId());
 
+// Access log — logs every request at info level for docker logs visibility
+app.use("*", async (c, next) => {
+  const start = Date.now();
+  const method = c.req.method;
+  const path = c.req.path;
+  await next();
+  const duration = Date.now() - start;
+  const status = c.res.status;
+  logger.info("access", {
+    method,
+    path,
+    status,
+    duration_ms: duration,
+    request_id: c.get("requestId"),
+  });
+});
+
 app.use("*", async (c, next) => {
   const requestId = c.get("requestId");
   const startTime = Date.now();
@@ -179,6 +196,19 @@ app.route("/cron", cronRouter);
 app.route("/", checkerRoute);
 
 app.route("/incident", incidentRoute);
+
+// Always log registered routes at startup for troubleshooting
+logger.info("routes registered", {
+  routes: [
+    "GET  /",
+    "GET  /ping",
+    "POST /updateStatus",
+    "POST /updateStatus/private",
+    "GET  /cron/*",
+    "/incident/*",
+  ],
+});
+
 if (NODE_ENV === "development") {
   showRoutes(app, { verbose: true, colorize: true });
 }

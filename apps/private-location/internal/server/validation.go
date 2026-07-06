@@ -35,6 +35,9 @@ func ValidateIngestTCPRequest(req *private_locationv1.IngestTCPRequest) error {
 	if req.Id == "" {
 		return ErrEmptyID
 	}
+	if req.MonitorId == "" {
+		return ErrEmptyMonitorID
+	}
 	if req.Latency < 0 {
 		return ErrInvalidLatency
 	}
@@ -48,6 +51,9 @@ func ValidateIngestTCPRequest(req *private_locationv1.IngestTCPRequest) error {
 func ValidateIngestDNSRequest(req *private_locationv1.IngestDNSRequest) error {
 	if req.Id == "" {
 		return ErrEmptyID
+	}
+	if req.MonitorId == "" {
+		return ErrEmptyMonitorID
 	}
 	if req.Latency < 0 {
 		return ErrInvalidLatency

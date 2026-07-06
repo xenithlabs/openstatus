@@ -211,6 +211,7 @@ const createCronTask = async ({
         : undefined,
       retry: row.retry || 3,
       followRedirects: row.followRedirects || true,
+      updatesStatus: row.updatesStatus ?? true,
     };
   }
   if (row.jobType === "tcp") {
@@ -225,6 +226,7 @@ const createCronTask = async ({
       timeout: row.timeout,
       trigger: "cron",
       retry: row.retry || 3,
+      updatesStatus: row.updatesStatus ?? true,
       otelConfig: row.otelEndpoint
         ? {
             endpoint: row.otelEndpoint,

@@ -132,7 +132,7 @@ export function Client() {
             paginationComponent={DataTablePagination}
             defaultColumnVisibility={
               monitor.jobType === "tcp" || monitor.jobType === "dns"
-                ? { timing: false, statusCode: false }
+                ? { statusCode: false }
                 : {}
             }
             // NOTE: required to control the pagination

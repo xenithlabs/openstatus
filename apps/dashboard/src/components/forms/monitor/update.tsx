@@ -19,6 +19,10 @@ import { FormResponseTime } from "./form-response-time";
 import { FormRetry, RETRY_DEFAULT } from "./form-retry";
 import { FormSchedulingRegions } from "./form-scheduling-regions";
 import { FormTags } from "./form-tags";
+import {
+  UPDATES_STATUS_DEFAULT,
+  FormUpdatesStatus,
+} from "./form-updates-status";
 import { FormVisibility } from "./form-visibility";
 
 export function FormMonitorUpdate() {
@@ -69,6 +73,11 @@ export function FormMonitorUpdate() {
   );
   const updateFollowRedirectsMutation = useMutation(
     trpc.monitor.updateFollowRedirects.mutationOptions({
+      onSuccess: () => refetch(),
+    }),
+  );
+  const updateUpdatesStatusMutation = useMutation(
+    trpc.monitor.updateUpdatesStatus.mutationOptions({
       onSuccess: () => refetch(),
     }),
   );
@@ -220,6 +229,17 @@ export function FormMonitorUpdate() {
           await updateFollowRedirectsMutation.mutateAsync({
             id: Number.parseInt(id),
             followRedirects: values.followRedirects ?? FOLLOW_REDIRECTS_DEFAULT,
+          })
+        }
+      />
+      <FormUpdatesStatus
+        defaultValues={{
+          updatesStatus: monitor.updatesStatus ?? UPDATES_STATUS_DEFAULT,
+        }}
+        onSubmit={async (values) =>
+          await updateUpdatesStatusMutation.mutateAsync({
+            id: Number.parseInt(id),
+            updatesStatus: values.updatesStatus ?? UPDATES_STATUS_DEFAULT,
           })
         }
       />

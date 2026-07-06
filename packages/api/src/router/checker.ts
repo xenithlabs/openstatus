@@ -412,6 +412,7 @@ export async function triggerChecker(
         : undefined,
       retry: input.retry || 3,
       followRedirects: input.followRedirects || true,
+      updatesStatus: true,
     };
   }
   if (input.jobType === "tcp") {
@@ -426,13 +427,13 @@ export async function triggerChecker(
       timeout: input.timeout,
       trigger: "cron",
       retry: input.retry || 3,
+      updatesStatus: true,
       otelConfig: input.otelEndpoint
         ? {
             endpoint: input.otelEndpoint,
             headers: transformHeaders(input.otelHeaders),
           }
         : undefined,
-      followRedirects: input.followRedirects || true,
     };
   }
   if (input.jobType === "dns") {
@@ -447,6 +448,7 @@ export async function triggerChecker(
       timeout: input.timeout,
       trigger: "cron",
       retry: input.retry || 3,
+      updatesStatus: true,
       otelConfig: input.otelEndpoint
         ? {
             endpoint: input.otelEndpoint,

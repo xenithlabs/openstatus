@@ -18,6 +18,7 @@ import {
   UpdateMonitorPublicInput,
   UpdateMonitorResponseTimeInput,
   UpdateMonitorRetryInput,
+  UpdateMonitorUpdatesStatusInput,
 } from "./schemas";
 
 /**
@@ -148,6 +149,35 @@ export async function updateMonitorOtel(args: {
         otelHeaders: headersToDbJson(input.otelHeaders),
         updatedAt: new Date(),
       })
+      .where(eq(monitor.id, existing.id))
+      .returning()
+      .get();
+    await emitAudit(tx, ctx, {
+      action: "monitor.update",
+      entityType: "monitor",
+      entityId: existing.id,
+      before: existing,
+      after: updated,
+    });
+  });
+}
+
+export async function updateMonitorUpdatesStatus(args: {
+  ctx: ServiceContext;
+  input: UpdateMonitorUpdatesStatusInput;
+}): Promise<void> {
+  const { ctx } = args;
+  requireScope(ctx, "write");
+  const input = UpdateMonitorUpdatesStatusInput.parse(args.input);
+  await withTransaction(ctx, async (tx) => {
+    const existing = await getMonitorInWorkspace({
+      tx,
+      id: input.id,
+      workspaceId: ctx.workspace.id,
+    });
+    const updated = await tx
+      .update(monitor)
+      .set({ updatesStatus: input.updatesStatus, updatedAt: new Date() })
       .where(eq(monitor.id, existing.id))
       .returning()
       .get();

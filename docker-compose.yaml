@@ -167,6 +167,7 @@ services:
         environment:
             - CHECKER_URL=http://checker:8080
             - OPENSTATUS_WORKFLOWS_URL=http://workflows:3000
+            - TINY_BIRD_API_KEY=${TINY_BIRD_API_KEY:-}
             - UPSTASH_REDIS_REST_URL=http://redis-http:80
             - UPSTASH_REDIS_REST_TOKEN=${UPSTASH_REDIS_REST_TOKEN:-replace-with-a-long-random-secret}
             - PORT=3000
@@ -271,6 +272,44 @@ services:
                 condition: service_healthy
         restart: unless-stopped
 
+    private-probe-2:
+        container_name: openstatus-private-probe-2
+        build:
+            context: apps/checker
+            dockerfile: Dockerfile.probe
+        image: openstatus/private-probe:latest
+        networks:
+            - openstatus
+        env_file:
+            - .env.docker
+        environment:
+            - OPENSTATUS_KEY=7093813b-e97c-4f03-a32e-3c3a5150a87f
+            - OPENSTATUS_INGEST_URL=http://private-location:8080
+            - LOG_LEVEL=debug
+        depends_on:
+            private-location:
+                condition: service_healthy
+        restart: unless-stopped
+
+    private-probe-3:
+        container_name: openstatus-private-probe-3
+        build:
+            context: apps/checker
+            dockerfile: Dockerfile.probe
+        image: openstatus/private-probe:latest
+        networks:
+            - openstatus
+        env_file:
+            - .env.docker
+        environment:
+            - OPENSTATUS_KEY=e5839fe5-a69a-4078-8345-4bb94ef6401b
+            - OPENSTATUS_INGEST_URL=http://private-location:8080
+            - LOG_LEVEL=debug
+        depends_on:
+            private-location:
+                condition: service_healthy
+        restart: unless-stopped
+
     private-location:
         container_name: openstatus-private-location
         build:
@@ -288,6 +327,8 @@ services:
             - DB_AUTH_TOKEN=
             - TINYBIRD_TOKEN=${TINY_BIRD_API_KEY:-}
             - TINYBIRD_URL=${TINYBIRD_URL:-http://tinybird-local:7181}
+            - OPENSTATUS_WORKFLOWS_URL=http://workflows:3000
+            - CRON_SECRET=${CRON_SECRET:-your-random-cron-secret}
             - GIN_MODE=release
             - PORT=8080
         depends_on:

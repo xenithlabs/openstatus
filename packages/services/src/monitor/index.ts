@@ -45,6 +45,7 @@ export {
   updateMonitorPublic,
   updateMonitorResponseTime,
   updateMonitorRetry,
+  updateMonitorUpdatesStatus,
 } from "./update";
 
 export {
@@ -73,4 +74,5 @@ export {
   UpdateMonitorRetryInput,
   UpdateMonitorSchedulingRegionsInput,
   UpdateMonitorTagsInput,
+  UpdateMonitorUpdatesStatusInput,
 } from "./schemas";

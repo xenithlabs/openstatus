@@ -576,7 +576,7 @@ export class OSTinybird {
         cronTimestamp: z.int(),
         message: z.string().nullable(),
         headers: headersSchema,
-        timing: timingSchema,
+        timing: timingPhasesSchema,
         assertions: z.string().nullable(),
         trigger: z.enum(triggers).nullable().prefault("cron"),
         timestamp: z.number(),
@@ -608,7 +608,7 @@ export class OSTinybird {
         region: z.enum(monitorRegions),
         timestamp: z.int().optional(),
         message: z.string().nullable().optional(),
-        timing: timingSchema,
+        timing: timingPhasesSchema,
         // TODO: make sure to include all data!
       }),
       opts: { cache: "no-store" },
@@ -630,6 +630,7 @@ export class OSTinybird {
         region: z.enum(monitorRegions).or(z.string()),
         cronTimestamp: z.int(),
         trigger: z.enum(triggers).nullable().prefault("cron"),
+        timing: timingPhasesSchema,
         timestamp: z.number(),
         workspaceId: z.coerce.string(),
       }),
@@ -654,6 +655,7 @@ export class OSTinybird {
         region: z.enum(monitorRegions).or(z.string()),
         cronTimestamp: z.int(),
         trigger: z.enum(triggers).nullable().prefault("cron"),
+        timing: timingPhasesSchema,
         timestamp: z.number(),
       }),
       opts: { next: { revalidate: REVALIDATE } },
@@ -674,6 +676,7 @@ export class OSTinybird {
         region: z.enum(monitorRegions).or(z.string()),
         cronTimestamp: z.int(),
         trigger: z.enum(triggers).nullable().prefault("cron"),
+        timing: timingPhasesSchema,
         timestamp: z.number(),
         workspaceId: z.coerce.string(),
       }),
@@ -698,6 +701,7 @@ export class OSTinybird {
         region: z.enum(monitorRegions).or(z.string()),
         cronTimestamp: z.int(),
         trigger: z.enum(triggers).nullable().prefault("cron"),
+        timing: timingPhasesSchema,
         timestamp: z.number(),
       }),
       opts: { next: { revalidate: REVALIDATE } },
@@ -718,6 +722,7 @@ export class OSTinybird {
         region: z.enum(monitorRegions).or(z.string()),
         cronTimestamp: z.int(),
         trigger: z.enum(triggers).nullable().prefault("cron"),
+        timing: timingPhasesSchema,
         timestamp: z.number(),
         workspaceId: z.coerce.string(),
       }),
@@ -742,6 +747,7 @@ export class OSTinybird {
         region: z.enum(monitorRegions).or(z.string()),
         cronTimestamp: z.int(),
         trigger: z.enum(triggers).nullable().prefault("cron"),
+        timing: timingPhasesSchema,
         timestamp: z.number(),
       }),
       opts: { next: { revalidate: REVALIDATE } },
@@ -1124,6 +1130,7 @@ export class OSTinybird {
         region: z.enum(monitorRegions).or(z.string()),
         cronTimestamp: z.int(),
         trigger: z.enum(triggers).nullable().prefault("cron"),
+        timing: timingPhasesSchema,
         timestamp: z.number(),
         requestStatus: z.enum(["error", "success", "degraded"]).nullable(),
         errorMessage: z.string().nullable(),
@@ -1149,6 +1156,7 @@ export class OSTinybird {
         region: z.enum(monitorRegions).or(z.string()),
         cronTimestamp: z.int(),
         trigger: z.enum(triggers).nullable().prefault("cron"),
+        timing: timingPhasesSchema,
         timestamp: z.number(),
         workspaceId: z.string(),
       }),
@@ -1369,6 +1377,28 @@ export class OSTinybird {
     });
   }
 
+  public get dnsGlobalMetricsDaily() {
+    return this.tb.buildPipe({
+      pipe: "endpoint__dns_metrics_global_1d__v0",
+      parameters: z.object({
+        monitorIds: z.string().array(),
+      }),
+      data: z.object({
+        minLatency: z.int(),
+        maxLatency: z.int(),
+        p50Latency: z.int(),
+        p75Latency: z.int(),
+        p90Latency: z.int(),
+        p95Latency: z.int(),
+        p99Latency: z.int(),
+        lastTimestamp: z.int(),
+        count: z.int(),
+        monitorId: z.string(),
+      }),
+      opts: { next: { revalidate: REVALIDATE } },
+    });
+  }
+
   public get httpTimingPhases14d() {
     return this.tb.buildPipe({
       pipe: "endpoint__http_timing_phases_14d__v1",
@@ -1544,6 +1574,7 @@ export class OSTinybird {
         region: z.enum(monitorRegions).or(z.string()),
         cronTimestamp: z.int(),
         trigger: z.enum(triggers).nullable().prefault("cron"),
+        timing: timingPhasesSchema,
         timestamp: z.number(),
         requestStatus: z.enum(["error", "success", "degraded"]).nullable(),
         errorMessage: z.string().nullable(),
@@ -1583,6 +1614,7 @@ export class OSTinybird {
         region: z.enum(monitorRegions).or(z.string()),
         cronTimestamp: z.int(),
         trigger: z.enum(triggers).nullable().prefault("cron"),
+        timing: timingPhasesSchema,
         timestamp: z.number(),
         records: z
           .string()

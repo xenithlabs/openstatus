@@ -65,6 +65,7 @@ export interface BuildCheckerPayloadInput {
     otelHeaders: { key: string; value: string }[] | null;
     retry: number | null;
     followRedirects: boolean | null;
+    updatesStatus: boolean | null;
   };
   timestamp: number;
   status: MonitorStatus;
@@ -108,6 +109,7 @@ export function buildCheckerPayload(
       retry: row.retry || 3,
       followRedirects:
         row.followRedirects === null ? true : row.followRedirects,
+      updatesStatus: row.updatesStatus ?? true,
     };
   }
 
@@ -123,6 +125,7 @@ export function buildCheckerPayload(
       timeout: row.timeout,
       trigger: "cron",
       retry: row.retry || 3,
+      updatesStatus: row.updatesStatus ?? true,
       otelConfig: row.otelEndpoint
         ? {
             endpoint: row.otelEndpoint,
@@ -151,6 +154,7 @@ export function buildCheckerPayload(
           }
         : undefined,
       retry: row.retry || 3,
+      updatesStatus: row.updatesStatus ?? true,
     };
   }
 
