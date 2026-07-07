@@ -15,8 +15,8 @@ services:
         networks:
             - openstatus
         ports:
-            - "8080:8080"
-            - "5001:5001"
+            - "127.0.0.1:8080:8080"
+            - "127.0.0.1:5001:5001"
         volumes:
             - libsql-data:/var/lib/sqld
         environment:
@@ -61,7 +61,7 @@ services:
         networks:
             - openstatus
         ports:
-            - "3000:3000"
+            - "127.0.0.1:3000:3000"
         env_file:
             - .env.docker
         environment:
@@ -91,7 +91,7 @@ services:
         networks:
             - openstatus
         ports:
-            - "3001:3000"
+            - "127.0.0.1:3001:3000"
         env_file:
             - .env.docker
         environment:
