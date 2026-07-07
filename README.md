@@ -57,40 +57,95 @@ Monitor your servers, websites and APIs from 28 regions across multiple cloud pr
 
 ## Getting Started
 
-### With Docker (Recommended)
+### Which deployment method?
 
-The fastest way to get started for both development and self-hosting:
+| I want to… | Use |
+|---|---|
+| Self-host everything with full control | [Docker Compose (Full)](#option-1-docker-compose-full-stack) |
+| Self-host without build toolchain | [Docker Compose (Pre-Built)](#option-2-docker-compose-pre-built-images) |
+| Try it out quickly, no analytics needed | [Docker Compose (Lightweight)](#option-3-docker-compose-lightweight) |
+| Deploy on Coolify | [Coolify](#option-4-coolify) |
+| Monitor targets in private/internal networks | [Private Probe](#option-5-private-probe-independent-server) |
+| Develop or contribute code | [Development Setup](#development-setup) |
+| No ops — use the managed service | [openstatus.dev](https://www.openstatus.dev) |
+
+---
+
+### Option 1: Docker Compose (Full Stack)
+
+All 14 services — analytics, probes, Redis, database, dashboard, and status page.
+Builds from source. **Best for production self-hosting.**
 
 ```sh
-# 1. Copy environment file
 cp .env.docker.example .env.docker
-
-# 2. Start all services
+# Edit .env.docker — set AUTH_SECRET and email config
 docker compose up -d
-
-# 3. Access the application
 open http://localhost:3002  # Dashboard
-open http://localhost:3003  # Status Pages
 ```
 
-Full guide: [DOCKER.md](DOCKER.md)
+**Requires:** Docker, `DOCKER_BUILDKIT=1`. **Full guide:** [DOCKER.md](DOCKER.md)
 
-### Self-Hosting with Coolify
+### Option 2: Docker Compose (Pre-Built Images)
 
-We provide pre-built Docker images for easy deployment:
+Same services as the full stack, but pulls pre-built images from GitHub Container
+Registry. **No build toolchain needed.**
 
-```bash
-ghcr.io/openstatushq/openstatus-server:latest
-ghcr.io/openstatushq/openstatus-dashboard:latest
-ghcr.io/openstatushq/openstatus-workflows:latest
-ghcr.io/openstatushq/openstatus-private-location:latest
-ghcr.io/openstatushq/openstatus-status-page:latest
-ghcr.io/openstatushq/openstatus-checker:latest
+```sh
+cp .env.docker.example .env.docker
+docker compose -f docker-compose.github-packages.yaml up -d
+open http://localhost:3002
 ```
 
-[Complete Coolify Deployment Guide](./COOLIFY_DEPLOYMENT.md)
+**Requires:** Docker only. **Images:** `ghcr.io/openstatushq/openstatus-*`.
+**Full guide:** [DOCKER.md](DOCKER.md)
 
-### Manual Setup
+### Option 3: Docker Compose (Lightweight)
+
+Minimal deployment — dashboard, status page, and database only.
+No analytics, no probes, no Redis. **Best for quick evaluation.**
+
+```sh
+cp .env.docker.example .env.docker
+docker compose -f docker-compose-lightweight.yaml up -d
+open http://localhost:3000  # Dashboard
+open http://localhost:3001  # Status Page
+```
+
+**Requires:** Docker. **Full guide:** [DOCKER.md](DOCKER.md)
+
+### Option 4: Coolify
+
+Two paths available:
+
+- **One-file import** — Point Coolify at [`coolify-deployment.yaml`](coolify-deployment.yaml).
+  Fastest setup: imports all services with pre-built images.
+- **Manual setup** — Configure each service individually using
+  `ghcr.io/openstatushq/openstatus-*` images.
+
+**Full guide:** [COOLIFY_DEPLOYMENT.md](COOLIFY_DEPLOYMENT.md)
+
+### Option 5: Private Probe (Independent Server)
+
+Deploy a **single 15 MB container** on any server to monitor targets inside your
+private network, behind firewalls, or from a specific location. The probe connects
+back to your main OpenStatus deployment. **No database, no Tinybird, no volumes.**
+
+```yaml
+# docker-compose.probe.yaml — on the probe server
+services:
+  private-probe:
+    image: ghcr.io/openstatushq/openstatus-checker:latest
+    entrypoint: ["/opt/bin/probe"]
+    environment:
+      - OPENSTATUS_KEY=<token-from-dashboard>
+      - OPENSTATUS_INGEST_URL=https://pl.yourdomain.com
+```
+
+**Full guide:** [docs/private-probe-independent-deployment.md](docs/private-probe-independent-deployment.md)
+
+---
+
+### Development Setup
 
 #### Requirements
 
@@ -120,12 +175,12 @@ pnpm install
 pnpm dx
 ```
 
-4. Launch whatever app you wish to:
+4. Launch the app you want to work on:
 
 ```sh
-pnpm dev:web
-pnpm dev:status-page
 pnpm dev:dashboard
+pnpm dev:status-page
+pnpm dev:web
 ```
 
 > **Note:** `pnpm dx` starts its own libSQL instance on port 8080 via process-compose.
@@ -134,7 +189,7 @@ pnpm dev:dashboard
 
 5. See the results:
 
-- open [http://localhost:3000](http://localhost:3000) (default port)
+- Dashboard: [http://localhost:3000](http://localhost:3000) (default port)
 
 ## Tech Stack
 
