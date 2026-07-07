@@ -25,6 +25,7 @@ type TCPData struct {
 	Trigger       string `json:"trigger"`
 	URI           string `json:"uri"`
 	RequestStatus string `json:"requestStatus,omitempty"`
+	Resolver      string `json:"resolver"`
 
 	RequestId     int64 `json:"requestId,omitempty"`
 	WorkspaceID   int64 `json:"workspaceId"`
@@ -151,6 +152,7 @@ func (h Handler) TCPHandler(c *gin.Context) {
 			Trigger:       trigger,
 			URI:           req.URI,
 			RequestStatus: requestStatus,
+			Resolver:      res.Timing.Resolver,
 		}
 
 		response = checker.TCPResponse{
@@ -333,6 +335,7 @@ func (h Handler) TCPHandlerRegion(c *gin.Context) {
 			RequestId:     req.RequestId,
 			Trigger:       "api",
 			URI:           req.URI,
+			Resolver:      res.Timing.Resolver,
 		}
 
 		if req.RequestId != 0 {

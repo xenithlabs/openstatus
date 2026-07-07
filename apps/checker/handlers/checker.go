@@ -42,6 +42,7 @@ type PingData struct {
 	Timestamp     int64  `json:"timestamp"`
 	StatusCode    int    `json:"statusCode,omitempty"`
 	Error         uint8  `json:"error"`
+	Resolver      string `json:"resolver"`
 }
 
 func (h Handler) HTTPCheckerHandler(c *gin.Context) {
@@ -167,6 +168,7 @@ func (h Handler) HTTPCheckerHandler(c *gin.Context) {
 			Body:          string(res.Body),
 			Trigger:       trigger,
 			RequestStatus: requestStatus,
+			Resolver:      res.Timing.Resolver,
 		}
 
 		var isSuccessfull bool = true

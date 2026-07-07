@@ -68,7 +68,7 @@ export function getColumns(
       enableHiding: false,
       cell: ({ row }) => {
         const log = row.original;
-        if (log.type === "http") {
+        if ("statusCode" in log && typeof log.statusCode === "number") {
           const value = log.statusCode;
           const variant = getStatusCodeVariant(value);
           return (

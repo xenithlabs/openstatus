@@ -14,7 +14,8 @@ SCHEMA >
     `trigger` String `json:$.trigger`,
     `uri` String `json:$.uri`,
     `workspaceId` Int16 `json:$.workspaceId`,
-    `timing` String `json:$.timing`
+    `timing` String `json:$.timing`,
+    `resolver` String `json:$.resolver`
 
 ENGINE "MergeTree"
 ENGINE_SORTING_KEY "trigger, uri, workspaceId"

@@ -246,7 +246,11 @@ export function DataTableBasicsHTTP({
             <TableRow>
               <TableHead colSpan={2}>Timing</TableHead>
             </TableRow>
-            {Object.entries(data?.timing ?? {}).map(([key, value], index) => (
+            {Object.entries(data?.timing ?? {})
+              .filter(([key, value]) => typeof value === "number" && ["dns", "connect", "tls", "ttfb", "transfer"].includes(key))
+              .map(([key, value], index) => {
+                const ms = value as number;
+                return (
               <TableRow key={key} className="[&>:not(:last-child)]:border-r">
                 <TableHead className="bg-muted/50 text-muted-foreground font-normal">
                   <span className="uppercase">{key}</span>
@@ -255,17 +259,17 @@ export function DataTableBasicsHTTP({
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex-1">
                       <span className="text-muted-foreground">
-                        {formatPercentage(value / (data?.latency || 100))}
+                        {formatPercentage(ms / (data?.latency || 100))}
                       </span>
                     </div>
                     <div className="flex w-full flex-1 items-center justify-end gap-2">
                       <span className="text-muted-foreground text-nowrap">
-                        {formatMilliseconds(value)}
+                        {formatMilliseconds(ms)}
                       </span>
                       <div
                         className="h-4"
                         style={{
-                          width: `${(value / (data?.latency || 100)) * 100}%`,
+                          width: `${(ms / (data?.latency || 100)) * 100}%`,
                           backgroundColor: `var(--chart-${index + 1})`,
                         }}
                       />
@@ -273,7 +277,7 @@ export function DataTableBasicsHTTP({
                   </div>
                 </TableCell>
               </TableRow>
-            ))}
+            );})}
           </>
         ) : null}
         {data?.message ? (
@@ -581,6 +585,50 @@ export function DataTableBasicsDNS({
             </TableHead>
             <TableCell className="max-w-full overflow-x-auto font-mono whitespace-normal">
               {data?.trigger}
+            </TableCell>
+          </TableRow>
+        ) : null}
+        {data.timing ? (
+          <TableRow className="[&>:not(:last-child)]:border-r">
+            <TableHead className="bg-muted/50 text-muted-foreground font-normal">
+              DNS Timing
+            </TableHead>
+            <TableCell className="max-w-full overflow-x-auto font-mono whitespace-normal">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex-1">
+                  <span className="text-muted-foreground">
+                    {new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(
+                      ((data.timing.dns || 0) / (data?.latency || 1)) * 100,
+                    )}
+                    %
+                  </span>
+                </div>
+                <div className="flex w-full flex-1 items-center justify-end gap-2">
+                  <span className="text-muted-foreground text-nowrap">
+                    {new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 }).format(
+                      data.timing.dns || 0,
+                    )}
+                    <span className="text-muted-foreground">ms</span>
+                  </span>
+                  <div
+                    className="h-4"
+                    style={{
+                      width: `${((data.timing.dns || 0) / (data?.latency || 1)) * 100}%`,
+                      backgroundColor: "var(--chart-1)",
+                    }}
+                  />
+                </div>
+              </div>
+            </TableCell>
+          </TableRow>
+        ) : null}
+        {data?.resolver ? (
+          <TableRow className="[&>:not(:last-child)]:border-r">
+            <TableHead className="bg-muted/50 text-muted-foreground font-normal">
+              DNS Resolver
+            </TableHead>
+            <TableCell className="max-w-full overflow-x-auto font-mono whitespace-normal">
+              {data.resolver}
             </TableCell>
           </TableRow>
         ) : null}

@@ -23,6 +23,17 @@ export const headersSchema = z
     return null;
   });
 
+export const dnsQueryPhaseSchema = z.object({
+  type: z.string(),
+  queryStart: z.number(),
+  sentAt: z.number(),
+  recvAt: z.number(),
+  queryDone: z.number(),
+  resolver: z.string().optional(),
+});
+
+export type DnsQueryPhase = z.infer<typeof dnsQueryPhaseSchema>;
+
 export const httpTimingSchema = z.object({
   dnsStart: z.number(),
   dnsDone: z.number(),
@@ -34,6 +45,8 @@ export const httpTimingSchema = z.object({
   firstByteDone: z.number(),
   transferStart: z.number(),
   transferDone: z.number(),
+  resolver: z.string().optional(),
+  dnsQueries: z.array(dnsQueryPhaseSchema).optional(),
 });
 
 export function transformTiming(val: string) {

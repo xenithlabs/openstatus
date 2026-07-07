@@ -19,16 +19,28 @@ import (
 )
 
 type Timing struct {
-	DnsStart          int64 `json:"dnsStart"`
-	DnsDone           int64 `json:"dnsDone"`
-	ConnectStart      int64 `json:"connectStart"`
-	ConnectDone       int64 `json:"connectDone"`
-	TlsHandshakeStart int64 `json:"tlsHandshakeStart"`
-	TlsHandshakeDone  int64 `json:"tlsHandshakeDone"`
-	FirstByteStart    int64 `json:"firstByteStart"`
-	FirstByteDone     int64 `json:"firstByteDone"`
-	TransferStart     int64 `json:"transferStart"`
-	TransferDone      int64 `json:"transferDone"`
+	DnsStart          int64            `json:"dnsStart"`
+	DnsDone           int64            `json:"dnsDone"`
+	ConnectStart      int64            `json:"connectStart"`
+	ConnectDone       int64            `json:"connectDone"`
+	TlsHandshakeStart int64            `json:"tlsHandshakeStart"`
+	TlsHandshakeDone  int64            `json:"tlsHandshakeDone"`
+	FirstByteStart    int64            `json:"firstByteStart"`
+	FirstByteDone     int64            `json:"firstByteDone"`
+	TransferStart     int64            `json:"transferStart"`
+	TransferDone      int64            `json:"transferDone"`
+	Resolver          string           `json:"resolver,omitempty"`
+	DnsQueries        []DnsQueryPhase  `json:"dnsQueries,omitempty"`
+}
+
+// DnsQueryPhase records per-record-type UDP DNS query timing.
+type DnsQueryPhase struct {
+	RecordType string `json:"type"`       // "A", "AAAA", "CNAME", "MX", "NS", "TXT"
+	QueryStart int64  `json:"queryStart"` // before socket write
+	SentAt     int64  `json:"sentAt"`     // after write completes
+	RecvAt     int64  `json:"recvAt"`     // after read returns
+	QueryDone  int64  `json:"queryDone"`  // after response parse
+	Resolver   string `json:"resolver,omitempty"` // server that answered
 }
 
 type Response struct {

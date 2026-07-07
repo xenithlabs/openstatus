@@ -27,6 +27,7 @@ type DNSResponse struct {
 	URI          string `json:"uri"`
 	RequestStatus string `json:"requestStatus,omitempty"`
 	Assertions   string `json:"assertions"`
+	Resolver     string `json:"resolver"`
 
 	Records map[string][]string `json:"records"`
 
@@ -171,6 +172,7 @@ func (h Handler) DNSHandler(c *gin.Context) {
 	data.Latency = latency
 	if result != nil {
 		data.Records = FormatDNSResult(result)
+		data.Resolver = result.Resolver
 	}
 
 	if len(req.RawAssertions) > 0 {
@@ -356,6 +358,7 @@ func (h Handler) DNSHandlerRegion(c *gin.Context) {
 	}
 
 	data.Records = FormatDNSResult(result)
+	data.Resolver = result.Resolver
 	if req.RequestId != 0 {
 		if tbEvent, err := data.tinybirdEvent(); err != nil {
 			log.Ctx(ctx).Error().Err(err).Msg("failed to marshal dns records")

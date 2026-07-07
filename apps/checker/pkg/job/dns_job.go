@@ -23,6 +23,7 @@ type DNSPrivateRegionData struct {
 	Error         int                 `json:"error"`
 	Timing        string              `json:"timing"`
 	Records       map[string][]string `json:"records"`
+	Resolver      string              `json:"resolver"`
 }
 
 func (jobRunner) DNSJob(ctx context.Context, monitor *v1.DNSMonitor) (*DNSPrivateRegionData, error) {
@@ -88,6 +89,7 @@ func (jobRunner) DNSJob(ctx context.Context, monitor *v1.DNSMonitor) (*DNSPrivat
 			Message:       fmt.Sprintf("DNS lookup succeeded for %s (resolver: %s)", monitor.Uri, res.Resolver),
 			Timing:        string(timingBytes),
 			Records:       records,
+			Resolver:      res.Resolver,
 		}, nil
 	}
 

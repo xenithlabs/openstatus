@@ -37,6 +37,7 @@ message IngestTCPRequest {
     string requestStatus = 8;
     int64 error = 9;
     string timing = 10;
+    string resolver = 11;
 
 }
 
@@ -58,6 +59,7 @@ message IngestHTTPRequest {
     string timing = 11;
     int64 statusCode = 12;
     int64 error = 13;
+    string resolver = 14;
 }
 
 message IngestHTTPResponse {
@@ -80,6 +82,7 @@ message IngestDNSRequest {
     map<string, Records>  records = 9;
     string timing = 10;
     int64 error = 11;
+    string resolver = 12;
 }
 message IngestDNSResponse {
 

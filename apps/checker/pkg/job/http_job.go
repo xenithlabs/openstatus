@@ -206,7 +206,8 @@ func (jr jobRunner) HTTPJob(ctx context.Context, monitor *v1.HTTPMonitor) (*Http
 			Body:          "",
 			RequestStatus: requestStatus,
 			// Assertions:    assertionAsString,
-			Error: 0,
+			Error:    0,
+			Resolver: res.Timing.Resolver,
 		}
 
 		if isSuccessful {

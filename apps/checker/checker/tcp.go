@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/miekg/dns"
 	"github.com/rs/zerolog/log"
 )
 
@@ -24,7 +25,8 @@ type TCPResponse struct {
 
 // PingTCP performs a TCP connectivity check with DNS resolution timing.
 // If the target is a hostname (not an IP), it resolves the host first and
-// records DNS timing. The connected remote IP is included in the response.
+// records DNS timing. The connected remote IP and DNS resolver address are
+// included in the response.
 func PingTCP(timeoutSec int, target string) (*TCPResponse, error) {
 	host, port, err := net.SplitHostPort(target)
 	if err != nil {
@@ -36,6 +38,7 @@ func PingTCP(timeoutSec int, target string) (*TCPResponse, error) {
 
 	var timing Timing
 	var resolvedIP string
+	var resolverAddr string
 
 	// Resolve hostname to IP(s) if the target is not already an IP
 	if ip := net.ParseIP(host); ip != nil {
@@ -44,21 +47,65 @@ func PingTCP(timeoutSec int, target string) (*TCPResponse, error) {
 		log.Info().Str("host", host).Str("ip", resolvedIP).Int("port", mustAtoi(port)).Str("timeout", timeout.String()).Msg("TCP check: target is already an IP, skipping DNS")
 		timing.DnsStart = time.Now().UTC().UnixMilli()
 		timing.DnsDone = timing.DnsStart
+		timing.Resolver = "" // no DNS resolution needed for IP targets
 	} else {
 		log.Info().Str("host", host).Int("port", mustAtoi(port)).Str("timeout", timeout.String()).Msg("TCP check: resolving hostname")
+
+		configNS := readResolvConfNameservers()
+		var server string
+		if len(configNS) > 0 {
+			server = net.JoinHostPort(configNS[0], "53")
+		} else {
+			server = "system"
+		}
+
 		dnsStart := time.Now().UTC().UnixMilli()
-		ips, lookupErr := net.LookupHost(host)
+
+		// Raw UDP A-record query with per-packet timing
+		m := new(dns.Msg)
+		m.SetQuestion(dns.Fqdn(host), dns.TypeA)
+		m.RecursionDesired = true
+		m.SetEdns0(1232, false)
+
+		wire, packErr := m.Pack()
+		var ips []string
 		dnsDone := time.Now().UTC().UnixMilli()
+
+		if packErr == nil && server != "system" {
+			conn, dialErr := net.DialTimeout("udp", server, 10*time.Second)
+			if dialErr == nil {
+				conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+				conn.Write(wire)
+				buf := make([]byte, 1232)
+				conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+				n, readErr := conn.Read(buf)
+				conn.Close()
+				if readErr == nil {
+					resp := new(dns.Msg)
+					if unpackErr := resp.Unpack(buf[:n]); unpackErr == nil {
+						for _, ans := range resp.Answer {
+							if a, ok := ans.(*dns.A); ok {
+								ips = append(ips, a.A.String())
+							}
+						}
+					}
+				}
+			}
+		}
+		dnsDone = time.Now().UTC().UnixMilli()
 		timing.DnsStart = dnsStart
 		timing.DnsDone = dnsDone
 		dnsLatency := dnsDone - dnsStart
 
-		if lookupErr != nil {
-			log.Error().Str("host", host).Err(lookupErr).Int64("dns_latency_ms", dnsLatency).Msg("TCP check: DNS resolution failed")
-			return nil, fmt.Errorf("DNS resolution failed for %q: %w", host, lookupErr)
+		if len(ips) == 0 {
+			log.Error().Str("host", host).Int64("dns_latency_ms", dnsLatency).Msg("TCP check: DNS resolution failed")
+			return nil, fmt.Errorf("DNS resolution failed for %q: no A records", host)
 		}
 
-		log.Info().Str("host", host).Strs("resolved_ips", ips).Int64("dns_latency_ms", dnsLatency).Msg("TCP check: DNS resolved")
+		resolverAddr = server
+		timing.Resolver = resolverAddr
+
+		log.Info().Str("host", host).Strs("resolved_ips", ips).Str("resolver", resolverAddr).Int64("dns_latency_ms", dnsLatency).Msg("TCP check: DNS resolved")
 		resolvedIP = ips[0] // use first resolved IP as representative
 	}
 

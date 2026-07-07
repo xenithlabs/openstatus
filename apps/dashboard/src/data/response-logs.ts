@@ -6,7 +6,7 @@ type ResponseLog = RouterOutputs["tinybird"]["list"]["data"][number];
 
 const today = startOfDay(new Date());
 
-export const exampleLogs: ResponseLog[] = Array.from({ length: 10 }).map(
+export const exampleLogs = Array.from({ length: 10 }).map(
   (_, i) => ({
     id: i.toString(),
     type: "http",

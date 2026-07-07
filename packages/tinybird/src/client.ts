@@ -1579,6 +1579,7 @@ export class OSTinybird {
         requestStatus: z.enum(["error", "success", "degraded"]).nullable(),
         errorMessage: z.string().nullable(),
         assertions: z.string().nullable(),
+        resolver: z.string().nullable().optional(),
         records: z
           .string()
           .transform((str) => {
@@ -1627,6 +1628,7 @@ export class OSTinybird {
             }
           })
           .pipe(z.record(z.string(), z.array(z.string()))),
+        resolver: z.string().nullable().optional(),
       }),
       opts: { next: { revalidate: REVALIDATE } },
     });

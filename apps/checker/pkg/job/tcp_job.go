@@ -24,6 +24,7 @@ type TCPPrivateRegionData struct {
 	CronTimestamp int64  `json:"cron_timestamp"`
 	Error         int    `json:"error"`
 	Timing        string `json:"timing"`
+	Resolver      string `json:"resolver"`
 }
 
 func (jobRunner) TCPJob(ctx context.Context, monitor *v1.TCPMonitor) (*TCPPrivateRegionData, error) {
@@ -96,6 +97,7 @@ func (jobRunner) TCPJob(ctx context.Context, monitor *v1.TCPMonitor) (*TCPPrivat
 			Error:         0,
 			Message:       msg,
 			Timing:        string(timingBytes),
+			Resolver:      res.Timing.Resolver,
 		}, nil
 	}
 

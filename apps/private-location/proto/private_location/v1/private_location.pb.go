@@ -9,7 +9,6 @@ package v1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	_ "google.golang.org/protobuf/types/known/structpb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -130,6 +129,7 @@ type IngestTCPRequest struct {
 	RequestStatus string                 `protobuf:"bytes,8,opt,name=requestStatus,proto3" json:"requestStatus,omitempty"`
 	Error         int64                  `protobuf:"varint,9,opt,name=error,proto3" json:"error,omitempty"`
 	Timing        string                 `protobuf:"bytes,10,opt,name=timing,proto3" json:"timing,omitempty"`
+	Resolver      string                 `protobuf:"bytes,11,opt,name=resolver,proto3" json:"resolver,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -234,6 +234,13 @@ func (x *IngestTCPRequest) GetTiming() string {
 	return ""
 }
 
+func (x *IngestTCPRequest) GetResolver() string {
+	if x != nil {
+		return x.Resolver
+	}
+	return ""
+}
+
 type IngestTCPResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -285,6 +292,7 @@ type IngestHTTPRequest struct {
 	Timing        string                 `protobuf:"bytes,11,opt,name=timing,proto3" json:"timing,omitempty"`
 	StatusCode    int64                  `protobuf:"varint,12,opt,name=statusCode,proto3" json:"statusCode,omitempty"`
 	Error         int64                  `protobuf:"varint,13,opt,name=error,proto3" json:"error,omitempty"`
+	Resolver      string                 `protobuf:"bytes,14,opt,name=resolver,proto3" json:"resolver,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -410,6 +418,13 @@ func (x *IngestHTTPRequest) GetError() int64 {
 	return 0
 }
 
+func (x *IngestHTTPRequest) GetResolver() string {
+	if x != nil {
+		return x.Resolver
+	}
+	return ""
+}
+
 type IngestHTTPResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -503,6 +518,7 @@ type IngestDNSRequest struct {
 	Records       map[string]*Records    `protobuf:"bytes,9,rep,name=records,proto3" json:"records,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Timing        string                 `protobuf:"bytes,10,opt,name=timing,proto3" json:"timing,omitempty"`
 	Error         int64                  `protobuf:"varint,11,opt,name=error,proto3" json:"error,omitempty"`
+	Resolver      string                 `protobuf:"bytes,12,opt,name=resolver,proto3" json:"resolver,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -614,6 +630,13 @@ func (x *IngestDNSRequest) GetError() int64 {
 	return 0
 }
 
+func (x *IngestDNSRequest) GetResolver() string {
+	if x != nil {
+		return x.Resolver
+	}
+	return ""
+}
+
 type IngestDNSResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -654,12 +677,12 @@ var File_private_location_v1_private_location_proto protoreflect.FileDescriptor
 
 const file_private_location_v1_private_location_proto_rawDesc = "" +
 	"\n" +
-	"*private_location/v1/private_location.proto\x12\x13private_location.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a%private_location/v1/dns_monitor.proto\x1a&private_location/v1/http_monitor.proto\x1a%private_location/v1/tcp_monitor.proto\"\x11\n" +
+	"*private_location/v1/private_location.proto\x12\x13private_location.v1\x1a%private_location/v1/dns_monitor.proto\x1a&private_location/v1/http_monitor.proto\x1a%private_location/v1/tcp_monitor.proto\"\x11\n" +
 	"\x0fMonitorsRequest\"\xe1\x01\n" +
 	"\x10MonitorsResponse\x12E\n" +
 	"\rhttp_monitors\x18\x01 \x03(\v2 .private_location.v1.HTTPMonitorR\fhttpMonitors\x12B\n" +
 	"\ftcp_monitors\x18\x02 \x03(\v2\x1f.private_location.v1.TCPMonitorR\vtcpMonitors\x12B\n" +
-	"\fdns_monitors\x18\x03 \x03(\v2\x1f.private_location.v1.DNSMonitorR\vdnsMonitors\"\x9e\x02\n" +
+	"\fdns_monitors\x18\x03 \x03(\v2\x1f.private_location.v1.DNSMonitorR\vdnsMonitors\"\xba\x02\n" +
 	"\x10IngestTCPRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1c\n" +
 	"\tmonitorId\x18\x02 \x01(\tR\tmonitorId\x12\x18\n" +
@@ -671,8 +694,9 @@ const file_private_location_v1_private_location_proto_rawDesc = "" +
 	"\rrequestStatus\x18\b \x01(\tR\rrequestStatus\x12\x14\n" +
 	"\x05error\x18\t \x01(\x03R\x05error\x12\x16\n" +
 	"\x06timing\x18\n" +
-	" \x01(\tR\x06timing\"\x13\n" +
-	"\x11IngestTCPResponse\"\xed\x02\n" +
+	" \x01(\tR\x06timing\x12\x1a\n" +
+	"\bresolver\x18\v \x01(\tR\bresolver\"\x13\n" +
+	"\x11IngestTCPResponse\"\x89\x03\n" +
 	"\x11IngestHTTPRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1c\n" +
 	"\tmonitorId\x18\x02 \x01(\tR\tmonitorId\x12\x18\n" +
@@ -689,10 +713,11 @@ const file_private_location_v1_private_location_proto_rawDesc = "" +
 	"\n" +
 	"statusCode\x18\f \x01(\x03R\n" +
 	"statusCode\x12\x14\n" +
-	"\x05error\x18\r \x01(\x03R\x05error\"\x14\n" +
+	"\x05error\x18\r \x01(\x03R\x05error\x12\x1a\n" +
+	"\bresolver\x18\x0e \x01(\tR\bresolver\"\x14\n" +
 	"\x12IngestHTTPResponse\"!\n" +
 	"\aRecords\x12\x16\n" +
-	"\x06record\x18\x01 \x03(\tR\x06record\"\xc6\x03\n" +
+	"\x06record\x18\x01 \x03(\tR\x06record\"\xe2\x03\n" +
 	"\x10IngestDNSRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1c\n" +
 	"\tmonitorId\x18\x02 \x01(\tR\tmonitorId\x12\x18\n" +
@@ -705,7 +730,8 @@ const file_private_location_v1_private_location_proto_rawDesc = "" +
 	"\arecords\x18\t \x03(\v22.private_location.v1.IngestDNSRequest.RecordsEntryR\arecords\x12\x16\n" +
 	"\x06timing\x18\n" +
 	" \x01(\tR\x06timing\x12\x14\n" +
-	"\x05error\x18\v \x01(\x03R\x05error\x1aX\n" +
+	"\x05error\x18\v \x01(\x03R\x05error\x12\x1a\n" +
+	"\bresolver\x18\f \x01(\tR\bresolver\x1aX\n" +
 	"\fRecordsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x122\n" +
 	"\x05value\x18\x02 \x01(\v2\x1c.private_location.v1.RecordsR\x05value:\x028\x01\"\x13\n" +

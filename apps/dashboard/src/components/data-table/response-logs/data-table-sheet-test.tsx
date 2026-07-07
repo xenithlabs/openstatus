@@ -108,6 +108,7 @@ function mapping(data: TestTCP | TestHTTP | TestDNS, monitor: Monitor) {
         records: data.records,
         errorMessage: null,
         assertions: null,
+        resolver: null,
       } as const;
     default:
       return null;

@@ -155,7 +155,7 @@ function BillingPlaceholder() {
   const columns = useMemo(() => getColumns([]), []);
   return (
     <BillingOverlayContainer>
-      <DataTable data={exampleLogs} columns={columns} />
+      <DataTable data={exampleLogs as any} columns={columns} />
       <BillingOverlay>
         <BillingOverlayButton asChild>
           <Link href="/settings/billing">

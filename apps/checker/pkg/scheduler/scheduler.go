@@ -78,6 +78,7 @@ func (mm *MonitorManager) UpdateMonitors(ctx context.Context) {
 							Error:         int64(data.Error),
 							CronTimestamp: data.CronTimestamp,
 							Timestamp:     data.Timestamp,
+							Resolver:      data.Resolver,
 						},
 					})
 					if ingestErr != nil {
@@ -134,6 +135,7 @@ func (mm *MonitorManager) UpdateMonitors(ctx context.Context) {
 							CronTimestamp: data.CronTimestamp,
 							Timestamp:     data.Timestamp,
 							Timing:        data.Timing,
+							Resolver:      data.Resolver,
 						},
 					})
 					if ingestErr != nil {
@@ -194,6 +196,7 @@ func (mm *MonitorManager) UpdateMonitors(ctx context.Context) {
 							Timestamp:     data.Timestamp,
 							Timing:        data.Timing,
 							Records:       records,
+							Resolver:      data.Resolver,
 						},
 					})
 					if ingestErr != nil {
