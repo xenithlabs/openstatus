@@ -38,7 +38,19 @@ The project is a monorepo managed with pnpm workspaces and Turborepo. It consist
 
 **Key utilities:** `clsx` + `tailwind-merge` via `class-variance-authority` (class composition), `react-hook-form` + Zod (forms), `@dnd-kit` (drag & drop), `recharts` (charts), `sonner` (toasts), `@tanstack/react-table` (tables), `@tanstack/react-query` via `@trpc/tanstack-react-query` (server state), `cmdk` (command palette), `date-fns` + `react-day-picker` (dates), `unified`/`remark`/`rehype` (markdown), `vaul` (drawer), `shiki` (code highlighting).
 
-**Architecture:** All frontend apps (`dashboard`, `web`, `status-page`) depend on `@openstatus/ui` — the shared shadcn/ui component package. Components are distributed as source (not an npm package) via a custom `registry:build` step. Tailwind v4 uses the PostCSS plugin (`@tailwindcss/postcss`) rather than a legacy config file. Radix UI provides all accessible headless primitives (dialog, dropdown, select, tooltip, tabs, toggle, accordion, etc.).
+**Architecture:** All frontend apps (`dashboard`, `web`, `status-page`) depend on `@openstatus/ui` — the shared shadcn/ui component package. Components are distributed as source (not an npm package) via a custom `registry:build` step. Tailwind v4 uses the PostCSS plugin (`@tailwindcss/postcss`) rather than a legacy config file. Radix UI provides all accessible headless primitives (dialog, dropdown, select, tooltip, tabs, toggle, accordion, collapsible, etc.).
+
+**Key UI blocks in `@openstatus/ui`:** `status-events` (incident cards with timeline), `status-event-collapsible` (foldable incident entries for history lists, built on Radix `Collapsible`), `status-feed` (recent-events feed), `status-banner` (active-incident banner), `status-bar` / `status-calendar` (uptime visualization).
+
+### Status Page Incident History
+
+The public status page (`apps/status-page`) renders incident history in an Adyen-style layout:
+
+- **Route:** `/events` → year tabs (2026, 2025…) with incidents grouped by month.
+- **Per-month detail:** `/events/july-2026` → all incidents for that month.
+- **3-per-month preview:** each month shows up to 3 incidents, collapsed by default (`StatusEventCollapsible` with chevron toggle). A "View all N incidents in Month Year →" link leads to the per-month page.
+- **Components:** `EventsYearList` (year-tab container) → `EventsMonthSection` (month group with preview cutoff) → `StatusEventCollapsible` (foldable incident card, from `@openstatus/ui`).
+- **Data:** the `statusPage.get` tRPC endpoint returns all `statusReports` and `maintenances`; month/year filtering and grouping is client-side.
 
 ### Architecture
 

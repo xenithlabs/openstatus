@@ -40,7 +40,7 @@ Or configure it as their registry in `components.json`:
 
 ## Localization (i18n)
 
-The status blocks ship with English (`en-US`) defaults and an optional context provider for translation. When a consumer installs `status-banner`, `status-bar`, `status-component`, `status-events`, or `status-feed`, the registry automatically pulls in `status-i18n` (declared as a `registryDependencies` entry on each consumer).
+The status blocks ship with English (`en-US`) defaults and an optional context provider for translation. When a consumer installs `status-banner`, `status-bar`, `status-component`, `status-events`, `status-event-collapsible`, or `status-feed`, the registry automatically pulls in `status-i18n` (declared as a `registryDependencies` entry on each consumer).
 
 - **Default behavior**: blocks render English with no setup — `useStatusBlocksLabels()` falls back to `defaultStatusBlocksLabels` when no provider is mounted.
 - **Localizing**: consumers mount `<StatusBlocksI18nProvider>` near their app root and supply a `StatusBlocksLabels` value (translated strings + locale-aware date formatters built from their own i18n library).
@@ -86,7 +86,7 @@ The build process is integrated with Turborepo:
 
 The registry source files are in `packages/ui/src/`:
 - `src/components/ui/*` - UI components
-- `src/components/blocks/*` - Component blocks
+- `src/components/blocks/*` - Component blocks (status-events, status-event-collapsible, status-feed, status-banner, status-bar, status-calendar, status-blank, status-component, status-layout, status-page-header, status-page-shell, status-i18n, status-timestamp, status-updates)
 - `src/lib/*` - Utility functions
 
 All imports use `@openstatus/ui/*` internally, which are transformed to `@/*` during the registry build.
