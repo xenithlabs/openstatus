@@ -42,5 +42,6 @@ type Monitor struct {
 }
 
 type PrivateLocation struct {
-	ID int `db:"id"`
+	ID                           int `db:"id"`
+	ConfigRefreshIntervalMinutes int `db:"config_refresh_interval_minutes"`
 }

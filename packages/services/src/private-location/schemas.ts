@@ -20,6 +20,7 @@ export const UpdatePrivateLocationInput = z.object({
   id: z.number().int(),
   name: z.string().min(1),
   monitors: monitorIds,
+  configRefreshIntervalMinutes: z.number().int().min(1).max(10).optional(),
 });
 export type UpdatePrivateLocationInput = z.infer<
   typeof UpdatePrivateLocationInput

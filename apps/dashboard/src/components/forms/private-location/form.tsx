@@ -17,6 +17,7 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@openstatus/ui/components/ui/input-group";
+import { Slider } from "@openstatus/ui/components/ui/slider";
 import { useCopyToClipboard } from "@openstatus/ui/hooks/use-copy-to-clipboard";
 import { cn } from "@openstatus/ui/lib/utils";
 import { isTRPCClientError } from "@trpc/client";
@@ -41,6 +42,7 @@ const schema = z.object({
   name: z.string().min(1, "Name is required"),
   token: z.string(),
   monitors: z.array(z.number()),
+  configRefreshIntervalMinutes: z.number().int().min(1).max(10),
 });
 
 export type FormValues = z.infer<typeof schema>;
@@ -62,6 +64,7 @@ export function FormPrivateLocation({
       name: "",
       token: crypto.randomUUID(),
       monitors: [],
+      configRefreshIntervalMinutes: 10,
     },
   });
   const [isPending, startTransition] = useTransition();
@@ -148,6 +151,34 @@ export function FormPrivateLocation({
                       </InputGroupButton>
                     </InputGroupAddon>
                   </InputGroup>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </FormCardContent>
+        <FormCardSeparator />
+        <FormCardContent>
+          <FormField
+            control={form.control}
+            name="configRefreshIntervalMinutes"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>
+                  Config Refresh Interval: {field.value} minute{field.value !== 1 ? "s" : ""}
+                </FormLabel>
+                <FormDescription>
+                  How often the probe fetches updated monitor configuration
+                  from the server.
+                </FormDescription>
+                <FormControl>
+                  <Slider
+                    min={1}
+                    max={10}
+                    step={1}
+                    value={[field.value]}
+                    onValueChange={([v]) => field.onChange(v)}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>

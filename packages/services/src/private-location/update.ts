@@ -57,7 +57,13 @@ export async function updatePrivateLocation(args: {
 
     const row = await tx
       .update(privateLocation)
-      .set({ name: input.name, updatedAt: new Date() })
+      .set({
+        name: input.name,
+        updatedAt: new Date(),
+        ...(input.configRefreshIntervalMinutes !== undefined && {
+          configRefreshIntervalMinutes: input.configRefreshIntervalMinutes,
+        }),
+      })
       .where(
         and(
           eq(privateLocation.id, input.id),

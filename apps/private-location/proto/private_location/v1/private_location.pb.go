@@ -58,12 +58,13 @@ func (*MonitorsRequest) Descriptor() ([]byte, []int) {
 }
 
 type MonitorsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	HttpMonitors  []*HTTPMonitor         `protobuf:"bytes,1,rep,name=http_monitors,json=httpMonitors,proto3" json:"http_monitors,omitempty"`
-	TcpMonitors   []*TCPMonitor          `protobuf:"bytes,2,rep,name=tcp_monitors,json=tcpMonitors,proto3" json:"tcp_monitors,omitempty"`
-	DnsMonitors   []*DNSMonitor          `protobuf:"bytes,3,rep,name=dns_monitors,json=dnsMonitors,proto3" json:"dns_monitors,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                        protoimpl.MessageState `protogen:"open.v1"`
+	HttpMonitors                 []*HTTPMonitor         `protobuf:"bytes,1,rep,name=http_monitors,json=httpMonitors,proto3" json:"http_monitors,omitempty"`
+	TcpMonitors                  []*TCPMonitor          `protobuf:"bytes,2,rep,name=tcp_monitors,json=tcpMonitors,proto3" json:"tcp_monitors,omitempty"`
+	DnsMonitors                  []*DNSMonitor          `protobuf:"bytes,3,rep,name=dns_monitors,json=dnsMonitors,proto3" json:"dns_monitors,omitempty"`
+	ConfigRefreshIntervalMinutes int32                  `protobuf:"varint,4,opt,name=config_refresh_interval_minutes,json=configRefreshIntervalMinutes,proto3" json:"config_refresh_interval_minutes,omitempty"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *MonitorsResponse) Reset() {
@@ -115,6 +116,13 @@ func (x *MonitorsResponse) GetDnsMonitors() []*DNSMonitor {
 		return x.DnsMonitors
 	}
 	return nil
+}
+
+func (x *MonitorsResponse) GetConfigRefreshIntervalMinutes() int32 {
+	if x != nil {
+		return x.ConfigRefreshIntervalMinutes
+	}
+	return 10
 }
 
 type IngestTCPRequest struct {

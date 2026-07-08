@@ -29,12 +29,18 @@ type MonitorManager struct {
 	mu        sync.Mutex
 }
 
-// UpdateMonitors fetches the latest monitors and starts/stops jobs as needed
-func (mm *MonitorManager) UpdateMonitors(ctx context.Context) {
+// UpdateMonitors fetches the latest monitors and starts/stops jobs as needed.
+// Returns the config refresh interval (in minutes) from the server, or 10 if unset.
+func (mm *MonitorManager) UpdateMonitors(ctx context.Context) int32 {
 	res, err := mm.Client.Monitors(ctx, &connect.Request[v1.MonitorsRequest]{})
 	if err != nil {
 		log.Printf("Failed to fetch monitors: %v", err)
-		return
+		return 10
+	}
+
+	intervalMinutes := res.Msg.GetConfigRefreshIntervalMinutes()
+	if intervalMinutes < 1 || intervalMinutes > 10 {
+		intervalMinutes = 10
 	}
 
 	currentIDs := make(map[string]struct{})
@@ -224,6 +230,7 @@ func (mm *MonitorManager) UpdateMonitors(ctx context.Context) {
 		}
 	}
 
+	return intervalMinutes
 }
 
 func intervalToSecond(interval string) int {

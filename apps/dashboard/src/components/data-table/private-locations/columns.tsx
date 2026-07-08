@@ -32,6 +32,21 @@ export const columns: ColumnDef<PrivateLocation>[] = [
     },
   },
   {
+    accessorKey: "configRefreshIntervalMinutes",
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title="Refresh (min)" />
+    ),
+    enableHiding: false,
+    cell: ({ row }) => {
+      const value = row.getValue("configRefreshIntervalMinutes") as number;
+      return (
+        <span className="tabular-nums font-mono">
+          {value ?? 10}
+        </span>
+      );
+    },
+  },
+  {
     accessorKey: "monitors",
     header: "Monitors",
     enableSorting: false,

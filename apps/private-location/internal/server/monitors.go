@@ -179,8 +179,15 @@ func (h *privateLocationHandler) Monitors(ctx context.Context, req *connect.Requ
 		return nil, connect.NewError(connect.CodeUnauthenticated, ErrMissingToken)
 	}
 
+	// Fetch the private location config (interval) once
+	var pl database.PrivateLocation
+	err := h.db.Get(&pl, "SELECT id, config_refresh_interval_minutes FROM private_location WHERE token = ?", token)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
 	var monitors []database.Monitor
-	err := h.db.Select(&monitors, "SELECT monitor.id, monitor.job_type, monitor.url, monitor.periodicity, monitor.method, monitor.body, monitor.timeout, monitor.degraded_after, monitor.follow_redirects, monitor.headers, monitor.assertions, monitor.workspace_id, monitor.retry FROM monitor JOIN private_location_to_monitor a ON monitor.id = a.monitor_id JOIN private_location b ON a.private_location_id = b.id WHERE b.token = ? AND monitor.deleted_at IS NULL and monitor.active = 1", token)
+	err = h.db.Select(&monitors, "SELECT monitor.id, monitor.job_type, monitor.url, monitor.periodicity, monitor.method, monitor.body, monitor.timeout, monitor.degraded_after, monitor.follow_redirects, monitor.headers, monitor.assertions, monitor.workspace_id, monitor.retry FROM monitor JOIN private_location_to_monitor a ON monitor.id = a.monitor_id JOIN private_location b ON a.private_location_id = b.id WHERE b.token = ? AND monitor.deleted_at IS NULL and monitor.active = 1", token)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -255,8 +262,9 @@ func (h *privateLocationHandler) Monitors(ctx context.Context, req *connect.Requ
 	}
 
 	return connect.NewResponse(&private_locationv1.MonitorsResponse{
-		HttpMonitors: httpMonitors,
-		TcpMonitors:  tcpMonitors,
-		DnsMonitors:  dnsMonitors,
+		HttpMonitors:                 httpMonitors,
+		TcpMonitors:                  tcpMonitors,
+		DnsMonitors:                  dnsMonitors,
+		ConfigRefreshIntervalMinutes: int32(pl.ConfigRefreshIntervalMinutes),
 	}), nil
 }

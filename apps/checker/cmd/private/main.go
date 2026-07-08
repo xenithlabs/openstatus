@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	configRefreshInterval = 10 * time.Minute
+	defaultConfigRefreshInterval = 10 * time.Minute
 )
 
 func main() {
@@ -32,7 +32,7 @@ func main() {
 		"ingest_url", ingestUrl,
 		"has_key", apiKey != "",
 		"log_level", logLevel,
-		"config_refresh_interval", configRefreshInterval.String(),
+		"config_refresh_interval", defaultConfigRefreshInterval.String(),
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -56,9 +56,14 @@ func main() {
 	}
 
 	slog.Info("fetching initial monitor configuration")
-	monitorManager.UpdateMonitors(ctx)
+	configRefreshMinutes := monitorManager.UpdateMonitors(ctx)
 
-	configTicker := time.NewTicker(configRefreshInterval)
+	configRefreshDuration := time.Duration(configRefreshMinutes) * time.Minute
+	slog.Info("config refresh interval set",
+		"interval_minutes", configRefreshMinutes,
+	)
+
+	configTicker := time.NewTicker(configRefreshDuration)
 	defer configTicker.Stop()
 
 	for {
@@ -68,7 +73,17 @@ func main() {
 			return
 		case <-configTicker.C:
 			slog.Debug("refreshing monitor configuration")
-			monitorManager.UpdateMonitors(ctx)
+			newMinutes := monitorManager.UpdateMonitors(ctx)
+			newDuration := time.Duration(newMinutes) * time.Minute
+			if newDuration != configRefreshDuration {
+				slog.Info("config refresh interval changed",
+					"old_minutes", configRefreshMinutes,
+					"new_minutes", newMinutes,
+				)
+				configTicker.Reset(newDuration)
+				configRefreshDuration = newDuration
+				configRefreshMinutes = newMinutes
+			}
 		}
 	}
 }

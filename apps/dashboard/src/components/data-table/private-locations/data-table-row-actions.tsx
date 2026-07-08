@@ -61,6 +61,9 @@ export function DataTableRowActions(props: DataTableRowActionsProps) {
           name: props.row.original.name,
           token: props.row.original.token.toString(),
           monitors: props.row.original.monitors.map((m) => m.id),
+          configRefreshIntervalMinutes:
+            (props.row.original as unknown as Record<string, unknown>)
+              .configRefreshIntervalMinutes as number | undefined ?? 10,
         }}
         monitors={monitors ?? []}
         onSubmit={async (values) => {
@@ -68,6 +71,8 @@ export function DataTableRowActions(props: DataTableRowActionsProps) {
             id: props.row.original.id,
             name: values.name,
             monitors: values.monitors,
+            configRefreshIntervalMinutes:
+              values.configRefreshIntervalMinutes,
           });
         }}
       >

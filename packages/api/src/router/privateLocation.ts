@@ -50,6 +50,7 @@ export const privateLocationRouter = createTRPCRouter({
         id: z.number(),
         name: z.string(),
         monitors: z.array(z.number()),
+        configRefreshIntervalMinutes: z.number().int().min(1).max(10).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
