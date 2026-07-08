@@ -157,3 +157,13 @@ API keys carry **scopes** (`'read'` / `'write'`) that gate write access. See `pa
 -   **MCP tools** declare `scope: 'read' | 'write'` and register via `registerScopedTool` — read-only keys never see write tools.
 
 Treat a missing `requireScope` the same as a missing `emitAudit` — mandatory for every mutation.
+
+## Incident Creation
+
+All incident lifecycle logic lives in `apps/workflows/src/checker/index.ts` (`processStatusUpdate`).
+
+- **`error` status** → always creates an incident (one open incident per monitor at a time).
+- **`degraded` status** → only creates an incident when the monitor column `degraded_triggers_incident` is `true` (default `false`).
+- **`active` status** → resolves any open incident (error or degraded) via `resolveIncident` (sets `autoResolved = true`).
+
+Incidents are resolved automatically when the monitor recovers. The `incidentTable` has a `unique(monitorId, startedAt)` constraint, so duplicate incident creation is prevented at the DB level. The `case "degraded"` with `degradedTriggersIncident` mirrors the `case "error"` pattern: check for existing open incident, insert, emit audit `incident.created`, and pass `incidentId` to notifications.

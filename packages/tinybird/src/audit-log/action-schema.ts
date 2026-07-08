@@ -9,6 +9,7 @@ export const monitorRecoveredSchema = z.object({
   metadata: z.object({
     region: z.string(),
     statusCode: z.number(),
+    message: z.string().optional(),
     latency: z.number().optional(),
     cronTimestamp: z.number().optional(),
   }),
@@ -23,6 +24,7 @@ export const monitorDegradedSchema = z.object({
   metadata: z.object({
     region: z.string(),
     statusCode: z.number(),
+    message: z.string().optional(),
     cronTimestamp: z.number().optional(),
     latency: z.number().optional(),
   }),

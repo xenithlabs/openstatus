@@ -6,7 +6,6 @@ import {
   selectNotificationSchema,
   selectWorkspaceSchema,
 } from "@openstatus/db/src/schema";
-import type { Region } from "@openstatus/db/src/schema/constants";
 import { Effect, Schedule } from "effect";
 
 import { checkerAudit } from "../utils/audit-log";
@@ -280,7 +279,7 @@ export const upsertMonitorStatus = async ({
 }: {
   monitorId: string;
   status: MonitorStatus;
-  region: Region;
+  region: string;
 }) => {
   const newData = await db
     .insert(schema.monitorStatusTable)
