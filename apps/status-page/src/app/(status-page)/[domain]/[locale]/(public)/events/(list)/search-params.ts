@@ -1,7 +1,7 @@
-import { createSearchParamsCache, parseAsStringEnum } from "nuqs/server";
+import { createSearchParamsCache, parseAsString } from "nuqs/server";
 
 export const searchParamsParsers = {
-  tab: parseAsStringEnum(["reports", "maintenances"]).withDefault("reports"),
+  year: parseAsString.withDefault(String(new Date().getFullYear())),
 };
 
 export const searchParamsCache = createSearchParamsCache(searchParamsParsers);

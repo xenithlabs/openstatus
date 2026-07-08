@@ -10,12 +10,6 @@ The project is a monorepo managed with pnpm workspaces and Turborepo. It consist
 
 ### Core Technologies
 
--   **Frontend:**
-    -   Next.js (with Turbopack)
-    -   React
-    -   Tailwind CSS
-    -   shadcn/ui
-    -   tRPC
 -   **Backend:**
     -   Hono (Node.js framework)
     -   Go
@@ -28,6 +22,23 @@ The project is a monorepo managed with pnpm workspaces and Turborepo. It consist
     -   NextAuth.js
 -   **Build System:**
     -   Turborepo
+
+### UI Stack
+
+| Layer | Technology | Version |
+|---|---|---|
+| Framework | Next.js (with Turbopack) | 16.2.6 |
+| UI Library | React | 19.2.6 |
+| Styling | Tailwind CSS v4 | 4.3.0 |
+| Component Primitives | Radix UI (headless, 20+ packages) | — |
+| Component System | shadcn/ui (code-distributed via `@openstatus/ui`) | 3.8.5 |
+| Icons | Lucide React | 0.525.0 |
+| Animations | `tailwindcss-animate` + `tw-animate-css` | — |
+| Theming | `next-themes` | 0.4.6 |
+
+**Key utilities:** `clsx` + `tailwind-merge` via `class-variance-authority` (class composition), `react-hook-form` + Zod (forms), `@dnd-kit` (drag & drop), `recharts` (charts), `sonner` (toasts), `@tanstack/react-table` (tables), `@tanstack/react-query` via `@trpc/tanstack-react-query` (server state), `cmdk` (command palette), `date-fns` + `react-day-picker` (dates), `unified`/`remark`/`rehype` (markdown), `vaul` (drawer), `shiki` (code highlighting).
+
+**Architecture:** All frontend apps (`dashboard`, `web`, `status-page`) depend on `@openstatus/ui` — the shared shadcn/ui component package. Components are distributed as source (not an npm package) via a custom `registry:build` step. Tailwind v4 uses the PostCSS plugin (`@tailwindcss/postcss`) rather than a legacy config file. Radix UI provides all accessible headless primitives (dialog, dropdown, select, tooltip, tabs, toggle, accordion, etc.).
 
 ### Architecture
 
