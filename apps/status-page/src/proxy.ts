@@ -147,6 +147,7 @@ export default auth(async (req) => {
             u.pathname = action.url.pathname;
             u.port = process.env.PORT || "3000";
             u.host = `localhost:${u.port}`;
+            u.protocol = "http:";
             return u;
           })()
         : action.url;

@@ -70,12 +70,15 @@ export function resolveRoute({
 
   // Resolve locale based on routing type
   if (type === "hostname") {
-    const firstSegment = pathnames[1]?.toLowerCase();
+    // Self-hosted with custom domain: the prefix may already be embedded in
+    // the path from a prior rewrite. Skip it to avoid infinite path nesting.
+    const offset = pathnames[1]?.toLowerCase() === prefix.toLowerCase() ? 1 : 0;
+    const firstSegment = pathnames[1 + offset]?.toLowerCase();
     const locale: Locale = isLocale(firstSegment)
       ? firstSegment
       : defaultLocale;
     const hasLocale = isLocale(firstSegment);
-    const rest = (hasLocale ? pathnames.slice(2) : pathnames.slice(1))
+    const rest = (hasLocale ? pathnames.slice(2 + offset) : pathnames.slice(1 + offset))
       .filter(Boolean)
       .join("/");
 

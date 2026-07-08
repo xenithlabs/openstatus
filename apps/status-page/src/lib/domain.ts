@@ -39,6 +39,12 @@ export const getValidSubdomain = (host?: string | null) => {
     }
   }
 
+  // Custom domain explicitly configured for self-hosted deployments
+  const customDomain = process.env.STATUS_PAGE_CUSTOM_DOMAIN;
+  if (host && customDomain && host === customDomain) {
+    subdomain = host;
+  }
+
   // In case the host is a custom domain
   if (
     host &&
