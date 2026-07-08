@@ -39,6 +39,7 @@ export {
 } from "./stream-monitor-preview";
 export {
   bulkUpdateMonitors,
+  updateMonitorDegradedTriggersIncident,
   updateMonitorFollowRedirects,
   updateMonitorGeneral,
   updateMonitorOtel,
@@ -65,6 +66,7 @@ export {
   monitorPeriodicity,
   type MonitorTimeRange,
   monitorTimeRange,
+  UpdateMonitorDegradedTriggersIncidentInput,
   UpdateMonitorFollowRedirectsInput,
   UpdateMonitorGeneralInput,
   UpdateMonitorNotifiersInput,

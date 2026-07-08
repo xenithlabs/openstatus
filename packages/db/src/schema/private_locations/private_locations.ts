@@ -13,6 +13,9 @@ export const privateLocation = sqliteTable(
     token: text("token").notNull(),
     lastSeenAt: integer("last_seen_at", { mode: "timestamp" }),
     workspaceId: integer("workspace_id").references(() => workspace.id),
+    configRefreshIntervalMinutes: integer(
+      "config_refresh_interval_minutes",
+    ).default(10),
     createdAt: integer("created_at", { mode: "timestamp" }).default(
       sql`(strftime('%s', 'now'))`,
     ),

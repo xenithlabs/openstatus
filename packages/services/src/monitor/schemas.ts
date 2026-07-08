@@ -80,6 +80,14 @@ export type UpdateMonitorUpdatesStatusInput = z.infer<
   typeof UpdateMonitorUpdatesStatusInput
 >;
 
+export const UpdateMonitorDegradedTriggersIncidentInput = z.object({
+  id: z.number().int(),
+  degradedTriggersIncident: z.boolean(),
+});
+export type UpdateMonitorDegradedTriggersIncidentInput = z.infer<
+  typeof UpdateMonitorDegradedTriggersIncidentInput
+>;
+
 export const UpdateMonitorOtelInput = z.object({
   id: z.number().int(),
   otelEndpoint: z.string(),

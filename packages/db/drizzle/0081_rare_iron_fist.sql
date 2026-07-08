@@ -1,0 +1,1 @@
+ALTER TABLE `private_location` ADD `config_refresh_interval_minutes` integer DEFAULT 10;

@@ -1,0 +1,1 @@
+ALTER TABLE `monitor` ADD `degraded_triggers_incident` integer DEFAULT false;

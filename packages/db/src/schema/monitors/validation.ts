@@ -63,6 +63,7 @@ export const selectMonitorSchema = createSelectSchema(monitor, {
   body: bodyToStringSchema.prefault(""),
   // for tcp monitors the method is not needed
   method: monitorMethodsSchema.prefault("GET"),
+  degradedTriggersIncident: booleanFromSqlite.prefault(false),
 });
 
 const headersSchema = z

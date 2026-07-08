@@ -62,6 +62,11 @@ export const monitor = sqliteTable(
       true,
     ),
 
+    // When true, degraded status creates an incident (like error does).
+    degradedTriggersIncident: integer("degraded_triggers_incident", {
+      mode: "boolean",
+    }).default(false),
+
     createdAt: integer("created_at", { mode: "timestamp" }).default(
       sql`(strftime('%s', 'now'))`,
     ),

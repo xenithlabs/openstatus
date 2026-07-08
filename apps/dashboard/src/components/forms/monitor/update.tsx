@@ -23,6 +23,10 @@ import {
   UPDATES_STATUS_DEFAULT,
   FormUpdatesStatus,
 } from "./form-updates-status";
+import {
+  DEGRADED_TRIGGERS_INCIDENT_DEFAULT,
+  FormDegradedTriggersIncident,
+} from "./form-degraded-triggers-incident";
 import { FormVisibility } from "./form-visibility";
 
 export function FormMonitorUpdate() {
@@ -78,6 +82,11 @@ export function FormMonitorUpdate() {
   );
   const updateUpdatesStatusMutation = useMutation(
     trpc.monitor.updateUpdatesStatus.mutationOptions({
+      onSuccess: () => refetch(),
+    }),
+  );
+  const updateDegradedTriggersIncidentMutation = useMutation(
+    trpc.monitor.updateDegradedTriggersIncident.mutationOptions({
       onSuccess: () => refetch(),
     }),
   );
@@ -240,6 +249,21 @@ export function FormMonitorUpdate() {
           await updateUpdatesStatusMutation.mutateAsync({
             id: Number.parseInt(id),
             updatesStatus: values.updatesStatus ?? UPDATES_STATUS_DEFAULT,
+          })
+        }
+      />
+      <FormDegradedTriggersIncident
+        defaultValues={{
+          degradedTriggersIncident:
+            monitor.degradedTriggersIncident ??
+            DEGRADED_TRIGGERS_INCIDENT_DEFAULT,
+        }}
+        onSubmit={async (values) =>
+          await updateDegradedTriggersIncidentMutation.mutateAsync({
+            id: Number.parseInt(id),
+            degradedTriggersIncident:
+              values.degradedTriggersIncident ??
+              DEGRADED_TRIGGERS_INCIDENT_DEFAULT,
           })
         }
       />

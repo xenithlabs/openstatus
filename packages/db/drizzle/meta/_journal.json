@@ -561,6 +561,20 @@
       "when": 1783323285108,
       "tag": "0079_overconfident_tyrannus",
       "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "6",
+      "when": 1790000000000,
+      "tag": "0080_calm_shadowcat",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "6",
+      "when": 1790000000001,
+      "tag": "0081_rare_iron_fist",
+      "breakpoints": true
     }
   ]
 }

@@ -12,6 +12,7 @@ import {
 } from "./internal";
 import {
   BulkUpdateMonitorsInput,
+  UpdateMonitorDegradedTriggersIncidentInput,
   UpdateMonitorFollowRedirectsInput,
   UpdateMonitorGeneralInput,
   UpdateMonitorOtelInput,
@@ -178,6 +179,38 @@ export async function updateMonitorUpdatesStatus(args: {
     const updated = await tx
       .update(monitor)
       .set({ updatesStatus: input.updatesStatus, updatedAt: new Date() })
+      .where(eq(monitor.id, existing.id))
+      .returning()
+      .get();
+    await emitAudit(tx, ctx, {
+      action: "monitor.update",
+      entityType: "monitor",
+      entityId: existing.id,
+      before: existing,
+      after: updated,
+    });
+  });
+}
+
+export async function updateMonitorDegradedTriggersIncident(args: {
+  ctx: ServiceContext;
+  input: UpdateMonitorDegradedTriggersIncidentInput;
+}): Promise<void> {
+  const { ctx } = args;
+  requireScope(ctx, "write");
+  const input = UpdateMonitorDegradedTriggersIncidentInput.parse(args.input);
+  await withTransaction(ctx, async (tx) => {
+    const existing = await getMonitorInWorkspace({
+      tx,
+      id: input.id,
+      workspaceId: ctx.workspace.id,
+    });
+    const updated = await tx
+      .update(monitor)
+      .set({
+        degradedTriggersIncident: input.degradedTriggersIncident,
+        updatedAt: new Date(),
+      })
       .where(eq(monitor.id, existing.id))
       .returning()
       .get();

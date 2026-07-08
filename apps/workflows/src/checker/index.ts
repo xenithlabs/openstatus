@@ -247,9 +247,45 @@ async function processStatusUpdate(params: {
           .set({ status: "degraded" })
           .where(eq(schema.monitor.id, monitor.id));
 
-        let incident = null;
+        // Resolve error incident if transitioning from error to degraded
         if (monitor.status === "error") {
-          incident = await resolveIncident({ monitorId, cronTimestamp });
+          await resolveIncident({ monitorId, cronTimestamp });
+        }
+
+        let incident = null;
+        if (monitor.degradedTriggersIncident) {
+          try {
+            const existingIncident = await findOpenIncident(
+              Number(monitorId),
+            );
+            if (existingIncident) {
+              logger.info("Already in incident", {
+                incident_id: existingIncident.id,
+              });
+            } else {
+              const [newIncident] = await db
+                .insert(incidentTable)
+                .values({
+                  monitorId: Number(monitorId),
+                  workspaceId: monitor.workspaceId,
+                  startedAt: new Date(cronTimestamp),
+                })
+                .returning();
+
+              if (newIncident?.id) {
+                incident = newIncident;
+
+                await checkerAudit.publishAuditLog({
+                  id: `monitor:${monitorId}`,
+                  action: "incident.created",
+                  targets: [{ id: monitorId, type: "monitor" }],
+                  metadata: { cronTimestamp, incidentId: newIncident.id },
+                });
+              }
+            }
+          } catch (error) {
+            logger.warning("Failed to create degraded incident", { error });
+          }
         }
 
         triggeredNotifications = await triggerNotifications({

@@ -20,6 +20,7 @@ import {
   monitorJobTypes,
   monitorMethods,
   monitorPeriodicity,
+  updateMonitorDegradedTriggersIncident,
   updateMonitorFollowRedirects,
   updateMonitorGeneral,
   updateMonitorNotifiers,
@@ -216,6 +217,25 @@ export const monitorRouter = createTRPCRouter({
           input: {
             id: input.id,
             updatesStatus: input.updatesStatus,
+          },
+        });
+      } catch (err) {
+        toTRPCError(err);
+      }
+    }),
+
+  updateDegradedTriggersIncident: protectedProcedure
+    .meta({ track: Events.UpdateMonitor })
+    .input(
+      z.object({ id: z.number(), degradedTriggersIncident: z.boolean() }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        await updateMonitorDegradedTriggersIncident({
+          ctx: toServiceCtx(ctx),
+          input: {
+            id: input.id,
+            degradedTriggersIncident: input.degradedTriggersIncident,
           },
         });
       } catch (err) {
