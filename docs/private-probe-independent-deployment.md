@@ -12,7 +12,7 @@ two components with a clean separation of concerns:
 | **private-probe** | Stateless agent — polls for monitor configs, runs checks locally, reports results | ❌ None | ❌ None | ✅ **Yes** |
 
 **Key insight:** `private-location` is the server-side gateway — it handles all
-database lookups, Tinybird writes, and Workflows callbacks. The `private-probe`
+database lookups, Tinybird writes, and workflows callbacks. The `private-probe`
 is a thin agent that only needs two environment variables and outbound network
 access.
 
@@ -20,68 +20,56 @@ access.
 
 ## Protocol-Annotated Architecture
 
+```mermaid
+graph TB
+    subgraph "Main OpenStatus Deployment"
+        LIBSQL[(libsql<br/>:8080 :5001)]
+        TINYBIRD[(tinybird-local<br/>:7181 :8123)]
+        WORKFLOWS[workflows<br/>:3000]
+        SERVER[server<br/>:3001/:3000]
+
+        subgraph "private-location (Go / ConnectRPC)"
+            PL[private-location<br/>:8080 internal<br/>listen 0.0.0.0:8081]
+        end
+    end
+
+    subgraph "Probe Server (any location)"
+        PROBE[private-probe<br/>Go scheduler<br/>~15MB binary<br/>no inbound ports]
+        HTTP_TARGET[Monitored<br/>HTTP targets]
+        TCP_TARGET[Monitored<br/>TCP targets]
+        DNS_TARGET[Monitored<br/>DNS targets]
+    end
+
+    %% Main deployment internal
+    PL -->|"libSQL wire<br/>token validation<br/>monitor lookup<br/>assertions fetch"| LIBSQL
+    PL -->|"Tinybird Events API<br/>POST /v0/events?name=..."| TINYBIRD
+    PL -->|"HTTP POST<br/>/updateStatus/private<br/>Basic auth"| WORKFLOWS
+    WORKFLOWS -->|"read/write state<br/>incidents, status"| LIBSQL
+    SERVER -->|"Tinybird Pipe API<br/>GET /v0/pipes/..."| TINYBIRD
+    SERVER -->|"services layer"| LIBSQL
+
+    %% Probe → private-location
+    PROBE -->|"ConnectRPC Monitors()<br/>GET, openstatus-token header<br/>10-min poll interval"| PL
+    PROBE -->|"ConnectRPC IngestHTTP/TCP/DNS<br/>POST, openstatus-token header<br/>per-check results"| PL
+
+    %% Probe → targets
+    PROBE -->|"HTTPS/HTTP"| HTTP_TARGET
+    PROBE -->|"Raw TCP socket"| TCP_TARGET
+    PROBE -->|"DNS (UDP 53)"| DNS_TARGET
+
+    %% Workflows notification dispatch
+    WORKFLOWS -->|"sendAlert/sendRecovery/sendDegraded<br/>via 13 provider channels"| SERVER
 ```
-┌────────────────────────── Main OpenStatus Deployment ──────────────────────────┐
-│                                                                                 │
-│  ┌────────────┐        ┌───────────────┐       ┌──────────────┐                │
-│  │   libsql   │        │ tinybird-local│       │  workflows   │                │
-│  │  :8080     │        │  :7181        │       │   :3000      │                │
-│  │            │        │  :8123        │       │              │                │
-│  └──┬──┬──┬──┘        └───────┬───────┘       └──┬─────┬─────┘                │
-│     │  │  │                   │                  │     │                       │
-│     │  │  │  libSQL HTTP      │ Tinybird          │     │  HTTP/JSON            │
-│     │  │  │  (Turso wire)     │ Events API        │     │  Basic Auth           │
-│     │  │  │                   │ HTTP/JSON         │     │  POST                 │
-│     │  │  │                   │ Bearer Auth       │     │  /updateStatus/private│
-│     │  │  │                   │ POST /v0/events   │     │                       │
-│     │  │  │                   │                   │     │                       │
-│  ┌──┴──┴──┴───────────────────┴───────────────────┴─────┴──────┐                │
-│  │                    private-location                         │                │
-│  │                    Go + ConnectRPC Server                   │                │
-│  │                    :8080 (internal)                         │   ◄── IPv4     │
-│  │                                                            │   0.0.0.0:8081 │
-│  │  RPC Endpoints:                                            │                │
-│  │    Monitors()    — GET  + Protobuf                         │                │
-│  │    IngestHTTP()  — POST + Protobuf                         │                │
-│  │    IngestTCP()   — POST + Protobuf                         │                │
-│  │    IngestDNS()   — POST + Protobuf                         │                │
-│  │                                                            │                │
-│  │  Auth: openstatus-token header (plain, requires TLS)       │                │
-│  └───────────────────────┬────────────────────────────────────┘                │
-│                          │                                                     │
-└──────────────────────────┼─────────────────────────────────────────────────────┘
-                           │
-        ┌──────────────────┴───────────────────┐
-        │   ConnectRPC over HTTP/1.1 or HTTP/2 │
-        │   Content-Type: application/proto    │
-        │   Auth: openstatus-token header      │
-        │   Encrypted by TLS (reverse proxy)   │
-        └──────────────────┬───────────────────┘
-                           │
-┌──────────────────────────┼─── Probe Server (any location) ─────────────────────┐
-│                          │                                                     │
-│   ┌──────────────────────┴───────────────────────────┐                         │
-│   │              private-probe                        │                         │
-│   │              Go scheduler loop                    │                         │
-│   │              ~15MB binary, ~30MB RAM              │                         │
-│   │                                                   │                         │
-│   │  OPENSTATUS_KEY=<token>                           │                         │
-│   │  OPENSTATUS_INGEST_URL=https://pl.yourdomain.com  │                         │
-│   │  LOG_LEVEL=info                                   │                         │
-│   │                                                   │                         │
-│   │  Poll interval: 10 min (config refresh)           │                         │
-│   │  Check interval: per monitor (10s – 1h)          │                         │
-│   └────┬──────────────┬──────────────┬────────────────┘                         │
-│        │              │              │                                          │
-│   ┌────┴────┐    ┌────┴────┐    ┌───┴────┐                                     │
-│   │ HTTPS   │    │ Raw TCP │    │  DNS   │                                     │
-│   │ (HTTP   │    │ socket  │    │ proto  │                                     │
-│   │ client) │    │ connect │    │ lookup │                                     │
-│   └─────────┘    └─────────┘    └────────┘                                     │
-│                                                                                │
-│   Single container. No DB. No Tinybird. No volumes. Zero inbound ports.        │
-└────────────────────────────────────────────────────────────────────────────────┘
-```
+
+### RPC Endpoints (private-location)
+
+| Endpoint | Method | Purpose | Auth |
+|---|---|---|---|
+| `/private_location.v1.PrivateLocationService/Monitors` | GET | Fetch monitor configs assigned to the location | `openstatus-token` header |
+| `/private_location.v1.PrivateLocationService/IngestHTTP` | POST | Report HTTP check result | `openstatus-token` header |
+| `/private_location.v1.PrivateLocationService/IngestTCP` | POST | Report TCP check result | `openstatus-token` header |
+| `/private_location.v1.PrivateLocationService/IngestDNS` | POST | Report DNS check result | `openstatus-token` header |
+| `/health` | GET | Health check (unauthenticated) | None |
 
 ---
 
@@ -89,7 +77,7 @@ access.
 
 | From | To | Protocol | Port | Auth | Payload |
 |---|---|---|---|---|---|
-| **private-probe** | **private-location** | **ConnectRPC** (HTTP/1.1 or HTTP/2, Protobuf binary, `connect.WithHTTPGet()`) | 8080 `→` 8081 | `openstatus-token` header | Protobuf |
+| **private-probe** | **private-location** | **ConnectRPC** (HTTP/1.1 or HTTP/2, Protobuf binary, `connect.WithHTTPGet()`) | 8080 → 8081 | `openstatus-token` header | Protobuf |
 | private-probe | monitored HTTP targets | **HTTPS** / HTTP | 443 / 80 | per-monitor headers | HTTP request |
 | private-probe | monitored TCP targets | **Raw TCP** socket | arbitrary | — | TCP connect |
 | private-probe | monitored DNS targets | **DNS** protocol (UDP 53) | 53 | — | DNS query |
@@ -97,14 +85,15 @@ access.
 | private-location | Tinybird | **Tinybird Events API** — `POST /v0/events?name=<ds>` | 7181 | `Bearer <token>` | JSON |
 | private-location | workflows | **HTTP/JSON** `POST /updateStatus/private` | 3000 | `Basic <cron_secret>` | JSON |
 | workflows | libsql | **libSQL wire protocol** over HTTP | 8080 | `DATABASE_AUTH_TOKEN` | SQL over HTTP |
-| workflows | checker (public) | **HTTP/JSON** `POST /checker/{http,tcp,dns}` | 8080 `→` 8082 | `Basic <cron_secret>` | JSON |
+| workflows | checker (public) | **HTTP/JSON** `POST /checker/{http,tcp,dns}` | 8080 → 8082 | `Basic <cron_secret>` | JSON |
+| workflows | notification providers | **HTTP/JSON** (webhooks) / **SMTP** / **API clients** | various | per-provider config | JSON / SMTP / SDK |
 | checker (public) | Tinybird | **Tinybird Events API** — `POST /v0/events?name=<ds>` | 7181 | `Bearer <token>` | JSON |
 | checker (public) | workflows | **HTTP/JSON** `POST /updateStatus` | 3000 | `Basic <cron_secret>` | JSON |
 | server | libsql | **libSQL wire protocol** over HTTP | 8080 | `DATABASE_AUTH_TOKEN` | SQL over HTTP |
 | server | Tinybird | **Tinybird Pipe API** — `GET /v0/pipes/<pipe>.json` | 7181 | `Bearer <token>` | JSON |
-| dashboard / status-page | server | **tRPC** over HTTP | 3000 `→` 3001 | NextAuth session | JSON |
+| dashboard / status-page | server | **tRPC** over HTTP | 3000 → 3001 | NextAuth session | JSON |
 | dashboard / status-page | libsql | **libSQL wire protocol** over HTTP | 8080 | `DATABASE_AUTH_TOKEN` | SQL over HTTP |
-| (internal) | Tinybird `→` ClickHouse | **ClickHouse Native** + **ClickHouse HTTP** | 9000 (internal), 8123 (exposed) | — | ClickHouse protocol |
+| (internal) | Tinybird → ClickHouse | **ClickHouse Native** + **ClickHouse HTTP** | 9000 (internal), 8123 (exposed) | — | ClickHouse protocol |
 
 > **Two separate Tinybird APIs are in play:**
 > - **Events API** (`POST /v0/events?name=<datasource>`) — high-throughput write path, used by `checker` and `private-location` to ingest raw check results.
@@ -114,39 +103,67 @@ access.
 
 ## Data Flow
 
+```mermaid
+sequenceDiagram
+    participant PROBE as private-probe
+    participant PL as private-location
+    participant DB as libsql
+    participant TB as tinybird-local
+    participant WF as workflows
+    participant EXT as External Providers<br/>(Slack/Email/SMS/...)
+
+    Note over PROBE,PL: Config Refresh (every 10 min)
+
+    PROBE->>PL: ConnectRPC GET Monitors()<br/>Header: openstatus-token
+    PL->>DB: validate token<br/>SELECT FROM private_location WHERE token = ?
+    PL->>DB: fetch monitor configs + assertions<br/>JOIN private_location_to_monitor → monitor
+    PL->>PROBE: return HTTP/TCP/DNS monitors
+
+    Note over PROBE: Check Execution (per-monitor schedule)
+
+    loop per monitor (10s to 1h period)
+        PROBE->>PROBE: execute probe (HTTP GET / TCP connect / DNS resolve)
+        PROBE->>PL: ConnectRPC POST IngestHTTP/TCP/DNS()<br/>Header: openstatus-token
+        PL->>DB: lookup monitor + assertions (token-scoped)
+        PL->>TB: POST /v0/events?name=ping_response__v8<br/>Bearer auth, JSON body
+        PL->>DB: UPDATE private_location SET last_seen_at = now()
+
+        opt monitor.updates_status == true
+            PL->>WF: POST /updateStatus/private<br/>Basic auth<br/>{ monitorId, status, region, cronTimestamp, ... }
+            WF->>WF: processStatusUpdate()
+            WF->>DB: compare across regions<br/>upsert monitor status
+            alt status changed
+                alt error
+                    WF->>DB: INSERT incident
+                    WF->>EXT: triggerNotifications("alert")
+                else active (recovery)
+                    WF->>DB: resolve incident (autoResolved)
+                    WF->>EXT: triggerNotifications("recovery")
+                else degraded
+                    WF->>DB: INSERT incident (if degradedTriggersIncident)
+                    WF->>EXT: triggerNotifications("degraded")
+                end
+            end
+        end
+    end
+
+    Note over TB: Dashboard reads analytics<br/>via server → Tinybird Pipe API
 ```
- 1.  private-probe polls every 10 minutes:
-       ConnectRPC GET /private_location.v1.PrivateLocationService/Monitors
-       Header: openstatus-token=<token>
 
- 2.  private-location validates token against DB:
-       SELECT ... FROM private_location WHERE token = ?
-       └── Join: private_location_to_monitor → monitor
-       Returns HTTP/TCP/DNS monitors with assertions
+### Key details
 
- 3.  private-probe schedules checks via tasks scheduler
-       Each monitor runs at its configured periodicity (10s, 30s, 1m, 5m, 10m, 30m, 1h)
+1. **Token scoping:** `private-location` validates the `openstatus-token` header against the `private_location` table on every RPC call. All DB queries (monitor lookup, assertions fetch) are scoped to the token's assigned monitors — preventing cross-tenant data leaks.
 
- 4.  After each check, private-probe reports:
-       ConnectRPC POST /private_location.v1.PrivateLocationService/IngestHTTP
-       Header: openstatus-token=<token>
-       Body: check-id, latency, status_code, timings, headers, body, error, etc.
+2. **Tinybird ingestion:** `private-location` uses the Tinybird Events API write path (`POST /v0/events`). The Go constants map to datasource names:
+   - `DatasourceHTTP` = `"ping_response__v8"` (HTTP)
+   - `DatasourceTCP` = `"tcp_response__v0"` (TCP)
+   - `DatasourceDNS` = `"dns_response__v0"` (DNS)
 
- 5.  private-location processes ingestion:
-       a) Looks up monitor + assertions in DB (token-scoped to prevent cross-tenant leaks)
-       b) Sends event to Tinybird Events API:
-            POST {TINYBIRD_URL}/v0/events?name=ping_response__v8
-            Header: Authorization: Bearer <tinybird_token>
-            Body: PingData JSON
-       c) UPDATE private_location SET last_seen_at = now()
-       d) If monitor.updates_status == true:
-            POST {OPENSTATUS_WORKFLOWS_URL}/updateStatus/private
-            Header: Authorization: Basic <cron_secret>
-            Body: { monitorId, status, region, cronTimestamp, statusCode, latency }
-            └── workflows evaluates incidents, sends notifications
+3. **Status update path:** When `monitor.updates_status == true`, `private-location` POSTs to workflows `/updateStatus/private`. Workflows then runs `processStatusUpdate` (majority-threshold logic), creates/resolves incidents, and dispatches notifications through the `triggerNotifications` → `providerToFunction` pipeline.
 
- 6.  Dashboard reads analytics from Tinybird Pipe API via server
-```
+4. **Notifications:** Private-location-triggered status changes go through the same notification pipeline as public checker results. See `docs/notification-system-gaps.md` for known limitations (no persistent queue, dedup-before-send, no delivery status).
+
+5. **Analytics reads:** The dashboard queries aggregated analytics via server → Tinybird Pipe API (GET endpoints), not the Events API write path.
 
 ---
 
@@ -380,7 +397,8 @@ Monitor check succeeded for 42 (https://my-internal-api.internal), ingest respon
 | 4 | Probe fetches monitors | `docker logs openstatus-private-probe \| grep "Started monitoring"` |
 | 5 | Check results ingested | Dashboard → monitor detail → recent checks visible |
 | 6 | Status updates working | Dashboard → monitor → status reflects real state |
-| 7 | `private-location` logs clean | `docker logs openstatus-private-location \| grep -i error` → no errors |
+| 7 | Notifications fire on status change | Verify notification channel receives alert/recovery/degraded |
+| 8 | `private-location` logs clean | `docker logs openstatus-private-location \| grep -i error` → no errors |
 
 ---
 
@@ -462,6 +480,17 @@ Monitor check succeeded for 42 (https://my-internal-api.internal), ingest respon
 
 See [self-hosted-docker-architecture.md](self-hosted-docker-architecture.md#dnstcp-monitors-show-no-data-in-dashboard) for common causes (missing required columns, wrong datasource names, requestStatus enum mismatch).
 
+### Notifications not firing for private-location monitors
+
+**Cause:** `monitor.updates_status` is `false`, or workflows can't be reached.
+
+**Check:**
+1. Verify the monitor has `updates_status` enabled (dashboard → monitor settings)
+2. Check `private-location` logs for workflow POST errors
+3. Verify `OPENSTATUS_WORKFLOWS_URL` and `CRON_SECRET` are set correctly
+4. Check workflows logs for `/updateStatus/private` requests and `triggerNotifications` output
+5. See `docs/notification-system-gaps.md` for known notification reliability limitations
+
 ### Probe can't reach monitored internal targets
 
 **Cause:** Docker bridge networking isolates the container from internal networks.
@@ -485,3 +514,11 @@ See [self-hosted-docker-architecture.md](self-hosted-docker-architecture.md#dnst
 - **Multiple probes per location:** Deploying multiple `private-probe` containers with the same `OPENSTATUS_KEY` spreads monitor checks across instances via the scheduler's `RunSingleInstance: true` flag.
 - **Multiple locations:** Create separate private locations in the dashboard (each gets its own token) and deploy probes in each target network.
 - **Resource limits:** A single probe handles hundreds of monitors comfortably. The Go binary uses ~30MB RAM. The `tasks` scheduler library is concurrency-safe.
+
+---
+
+## Related Documentation
+
+- [Self-Hosted Docker Architecture](self-hosted-docker-architecture.md) — full service topology, startup order, network config
+- [Notification System Gaps](notification-system-gaps.md) — known limitations in notification delivery reliability
+- [Architecture Overview](architecture.md) — cloud deployment, CI/CD, package inventory

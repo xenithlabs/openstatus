@@ -593,28 +593,137 @@ JavaScript tracker script served to end users for RUM (Real User Monitoring) dat
 **Used by:** Dashboard, Server, Status-Page, Web.
 
 
-### Notifications (14 channels)
+### Notification System
 
-All under `packages/notifications/`. Each is a standalone package with its own `package.json` and `tsconfig.json`.
+OpenStatus sends alerts through 13 notification provider channels when monitors go down, degrade, or recover. The system spans from database schema through business logic, workflow orchestration, provider implementations, API endpoints, and dashboard UI.
 
-| Package | Channel | Used by |
-|---------|---------|---------|
-| `notifications/slack` | Slack webhooks + Block Kit | Dashboard, Server, Web, API, Workflows |
-| `notifications/discord` | Discord webhooks | Dashboard, Server, Web, Workflows |
-| `notifications/email` | Email via Resend | Dashboard, Workflows, Status-Page, Web |
-| `notifications/pagerduty` | PagerDuty incidents | Dashboard, Server, Web, Workflows |
-| `notifications/opsgenie` | Opsgenie alerts | Dashboard, Web, Workflows |
-| `notifications/telegram` | Telegram bot | Dashboard, Server, Workflows |
-| `notifications/webhook` | Generic HTTP webhook | Dashboard, Server, Web, Workflows |
-| `notifications/ms-teams` | Microsoft Teams | Dashboard, Workflows |
-| `notifications/google-chat` | Google Chat | Dashboard, Server, Workflows |
-| `notifications/grafana-oncall` | Grafana OnCall | Dashboard, Server, Workflows |
-| `notifications/ntfy` | ntfy.sh push | Dashboard, Server, Web, Workflows |
-| `notifications/bird-whatsapp` | WhatsApp via Bird | Dashboard, Server, Workflows |
-| `notifications/twillio-sms` | SMS via Twilio | Workflows |
-| `notifications/base` | Shared message formatting | Most notification packages |
+#### Database Schema (`packages/db/src/schema/notifications/`)
 
-**`notifications/base`** provides shared utilities: `buildCommonMessageData`, `formatDuration`, `formatStatusCode`, `formatTimestamp`, `COLORS`, `calculateDuration`.
+Three tables power notifications:
+
+- **`notification`** — Core table: `id`, `name`, `provider` (enum), `data` (JSON string storing provider-specific config), `workspaceId`
+- **`notifications_to_monitors`** — Junction table linking notifications to monitors (M:N)
+- **`notification_trigger`** — Deduplication log: records each notification send with `(monitorId, notificationId, cronTimestamp)`. Prevents duplicate sends and tracks SMS quota usage.
+
+**13 supported providers:** `discord`, `email`, `google-chat`, `grafana-oncall`, `ms-teams`, `ntfy`, `pagerduty`, `opsgenie`, `slack`, `sms`, `telegram`, `webhook`, `whatsapp`
+
+Each provider has a Zod schema for its `data` payload (e.g., `slackDataSchema` validates a webhook URL, `emailDataSchema` validates an email address, `ntfyDataSchema` validates a topic + server URL + optional token).
+
+**Plan-gated providers** (require a plan flag): `sms`, `pagerduty`, `opsgenie`, `grafana-oncall`, `whatsapp`. The rest (`email`, `slack`, `discord`, `webhook`, `telegram`, `ntfy`, `google-chat`, `ms-teams`) are always available.
+
+#### Services Layer (`packages/services/src/notification/`)
+
+CRUD operations following the standard service pattern:
+
+- **`create.ts`** — Creates notification + `notificationsToMonitors` links. Checks: plan limits (`notification-channels` count), provider plan gates (`assertProviderAllowed`), monitor ownership (`validateMonitorIds`). Emits audit `notification.create`.
+- **`update.ts`** — Updates name/data/monitors. Full replace: diffs monitor associations.
+- **`delete.ts`** — Soft-delete (removes `notificationsToMonitors` rows first).
+- **`list.ts`** — List with pagination, joins monitors.
+- **`internal.ts`** — Helpers: `getNotificationInWorkspace` (fetch-or-throw), `validateMonitorIds` (ownership + non-deleted check), `assertProviderAllowed` (plan gates), `validateNotificationData` (provider-specific schema validation).
+- **`schemas.ts`** — Zod input schemas for create/update/delete/list.
+
+All mutations call `requireScope(ctx, "write")` first and wrap in `withTransaction`.
+
+#### Notification Sending Flow (Workflows → Providers)
+
+**`apps/workflows/src/checker/`** orchestrates the triggering:
+
+1. **`index.ts` (`processStatusUpdate`)** — Status-change detection logic:
+   - `error` → creates incident, calls `triggerNotifications` with `notifType: "alert"`
+   - `degraded` → optionally creates incident (based on `degradedTriggersIncident` flag), calls `triggerNotifications` with `notifType: "degraded"`
+   - `active` → resolves any open incident, calls `triggerNotifications` with `notifType: "recovery"`
+   - Majority threshold: status only changes globally when ≥50% of regions agree
+
+2. **`alerting.ts` (`triggerNotifications`)** — The notification dispatcher:
+   - Joins `notificationsToMonitors` → `notification` → `monitor` for the affected monitor
+   - SMS quota check: counts SMS triggers in last 30 days vs workspace `sms-limit`
+   - Deduplication: inserts into `notificationTrigger`; unique constraint prevents resends
+   - Dispatches via `providerToFunction[provider].sendAlert/sendRecovery/sendDegraded`
+   - Each send wrapped in `Effect.retry` (3 retries, exponential backoff starting at 1s)
+   - Publishes `notification.sent` audit event
+
+3. **`utils.ts` (`providerToFunction`)** — Registry mapping all 13 provider names to their `{ sendAlert, sendRecovery, sendDegraded }` implementation. Imported from each provider package.
+
+#### Notification Providers (`packages/notifications/`)
+
+Each of the 13 providers is a standalone package exporting three functions:
+
+```ts
+sendAlert(context: NotificationContext): Promise<void>
+sendRecovery(context: NotificationContext): Promise<void>
+sendDegraded(context: NotificationContext): Promise<void>
+```
+
+**`NotificationContext`** (from `@openstatus/notification-base`):
+```ts
+{
+  monitor: Monitor;
+  notification: Notification;  // includes data (provider config JSON)
+  statusCode?: number;
+  message?: string;
+  cronTimestamp: number;
+  regions?: string[];
+  latency?: number;
+  incident?: Incident;
+}
+```
+
+**`notifications/base`** provides shared formatting utilities used by all providers:
+- `buildCommonMessageData` — Converts context into formatted strings (monitor name/URL, status code, latency, regions, timestamps, dashboard URL, incident duration)
+- `formatDuration`, `calculateDuration` — Incident duration display
+- `formatTimestamp` — Timestamp formatting
+- `formatStatusCode` — HTTP status code display
+- `COLORS`, `COLOR_DECIMALS` — Status color palette (red/green/yellow)
+
+**Provider implementations** parse their specific config from `notification.data` (stored as JSON), validate via the provider-specific schema, then call the external service:
+
+| Provider | Parses config shape | Sends via |
+|----------|-------------------|-----------|
+| Slack | `{ slack: webhookUrl }` | HTTP POST (Block Kit attachments) |
+| Discord | `{ discord: webhookUrl }` | HTTP POST (embeds) |
+| Email | `{ email: "user@domain" }` | Resend API (via `EmailClient`) |
+| PagerDuty | `{ pagerduty: integrationKey }` | PagerDuty Events API v2 |
+| Opsgenie | `{ opsgenie: { apiKey, region } }` | Opsgenie Alert API |
+| Telegram | `{ telegram: { chatId } }` | Telegram Bot API |
+| Webhook | `{ webhook: { endpoint, headers[] } }` | HTTP POST (custom headers) |
+| MS Teams | `{ "ms-teams": { webhookUrl } }` | Adaptive Card via webhook |
+| Google Chat | `{ "google-chat": webhookUrl }` | Google Chat webhook |
+| Grafana OnCall | `{ "grafana-oncall": { webhookUrl } }` | Grafana OnCall webhook |
+| Ntfy | `{ ntfy: { topic, serverUrl, token? } }` | ntfy.sh HTTP push |
+| WhatsApp | `{ whatsapp: phoneString }` | Bird (MessageBird) API |
+| SMS | `{ sms: phoneString }` | Twilio API |
+
+#### API Endpoints
+
+**REST v1** (`apps/server/src/routes/v1/notifications/`):
+- `GET /` — List all notifications for workspace
+- `GET /:id` — Get single notification
+- `POST /` — Create notification (with payload validation, plan limits)
+
+**ConnectRPC v2** (`apps/server/src/routes/rpc/handlers/notification/`):
+- `createNotification`, `getNotification`, `listNotifications`, `updateNotification`, `deleteNotification` — Full CRUD
+- `sendTestNotification` — Send a test notification via any provider
+- `checkNotificationLimit` — Return quota info for the workspace
+- All handlers delegate to `packages/services/notification` verbs
+
+#### Dashboard UI
+
+**Page:** `apps/dashboard/src/app/(dashboard)/notifications/`
+- **List view** — `DataTable` showing existing notifications (name, provider badge, linked monitors, edit/delete actions)
+- **Create** — Card grid with 13 provider tiles. Each opens a slide-over sheet (`FormSheetNotifier`) with the provider-specific form.
+- **Limit check** — Cards are disabled when `notifications.length >= limits["notification-channels"]`
+
+**Form components** (`apps/dashboard/src/components/forms/notifications/`):
+- **`form.tsx`** — Base form: name input + monitor checkbox tree
+- **`sheet.tsx`** — Sheet wrapper with `FormSheetWithDirtyProtection`, submit button
+- **`form-slack.tsx`**, **`form-discord.tsx`**, etc. — Provider-specific form fields (webhook URL, email, phone number, API key, etc.)
+- **`notifications.client.ts`** — Registry: `config[provider] = { icon, label, form }` mapping
+
+**Data table** (`apps/dashboard/src/components/data-table/notifications/`):
+- **`columns.tsx`** — Name, provider badge (with icon), monitors (linked), actions dropdown
+- **`data-table-row-actions.tsx`** — Edit (opens sheet with pre-filled values) + Delete (with confirmation)
+
+**Data fetching:** All via tRPC (`trpc.notification.list`, `trpc.notification.new`, `trpc.notification.updateNotifier`, `trpc.notification.delete`) using `@tanstack/react-query`.
 
 
 ### UI & Theming

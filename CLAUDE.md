@@ -190,3 +190,51 @@ All incident lifecycle logic lives in `apps/workflows/src/checker/index.ts` (`pr
 - **`active` status** → resolves any open incident (error or degraded) via `resolveIncident` (sets `autoResolved = true`).
 
 Incidents are resolved automatically when the monitor recovers. The `incidentTable` has a `unique(monitorId, startedAt)` constraint, so duplicate incident creation is prevented at the DB level. The `case "degraded"` with `degradedTriggersIncident` mirrors the `case "error"` pattern: check for existing open incident, insert, emit audit `incident.created`, and pass `incidentId` to notifications.
+
+## Notification System
+
+Notifications span three layers: CRUD (services + API), dispatch (workflows + providers), and dashboard UI.
+
+### Database Schema (`packages/db/src/schema/notifications/`)
+
+Three tables: `notification` (core row with `name`, `provider` enum, `data` JSON), `notificationsToMonitors` (M:N junction), `notificationTrigger` (dedup log: `unique(notificationId, monitorId, cronTimestamp)` — prevents duplicate sends and tracks SMS quota).
+
+13 providers: `discord`, `email`, `google-chat`, `grafana-oncall`, `ms-teams`, `ntfy`, `pagerduty`, `opsgenie`, `slack`, `sms`, `telegram`, `webhook`, `whatsapp`.
+
+Plan-gated providers (`sms`, `pagerduty`, `opsgenie`, `grafana-oncall`, `whatsapp`) are enforced in `internal.ts` (`assertProviderAllowed`). The rest are always available.
+
+### Service Layer (`packages/services/src/notification/`)
+
+Standard one-file-per-verb pattern: `create.ts`, `update.ts`, `delete.ts`, `list.ts`. All mutations call `requireScope(ctx, "write")`, wrap in `withTransaction`, emit audit (`notification.create`, `notification.update`, `notification.deleted`). `internal.ts` provides workspace-scoped helpers: `getNotificationInWorkspace`, `validateMonitorIds`, `assertProviderAllowed`, `validateNotificationData`.
+
+### Notification Dispatch (`apps/workflows/src/checker/`)
+
+`alerting.ts` (`triggerNotifications`) is the central dispatcher called from `processStatusUpdate` when status changes:
+
+- Joins `notificationsToMonitors` → `notification` → `monitor` for the affected monitor
+- SMS quota: counts triggers in last 30 days vs `workspace.limits["sms-limit"]`
+- Dedup: inserts `notificationTrigger` row; unique constraint prevents re-send
+- Dispatches via `providerToFunction[provider].sendAlert/sendRecovery/sendDegraded`
+- Each send wrapped in `Effect.retry` (3 retries, exponential backoff from 1s)
+- Publishes `notification.sent` audit event
+
+`utils.ts` contains `providerToFunction` — a `Record<NotificationProvider, { sendAlert, sendRecovery, sendDegraded }>` mapping each provider to its implementation from `packages/notifications/`.
+
+### Provider Implementations (`packages/notifications/`)
+
+Each provider is a standalone package exporting `sendAlert`, `sendRecovery`, `sendDegraded` (all receive `NotificationContext`). `notifications/base` provides shared formatting: `buildCommonMessageData`, `formatDuration`, `formatStatusCode`, `formatTimestamp`, `COLORS`.
+
+Providers parse their config from `notification.data` (JSON string) using the per-provider Zod schema from `packages/db/src/schema/notifications/validation.ts`, then call the external service (HTTP webhook, API client, Resend, Twilio, etc.).
+
+### API Endpoints
+
+- **REST v1:** `apps/server/src/routes/v1/notifications/` — `GET /`, `GET /:id`, `POST /`
+- **ConnectRPC v2:** `apps/server/src/routes/rpc/handlers/notification/` — full CRUD + `sendTestNotification` + `checkNotificationLimit`. All delegate to `packages/services/notification`.
+
+### Dashboard UI
+
+- **Page:** `apps/dashboard/src/app/(dashboard)/notifications/` — DataTable of existing notifications + card grid for creating new ones (13 provider tiles)
+- **Forms:** `apps/dashboard/src/components/forms/notifications/` — `form.tsx` (base: name + monitor tree), `sheet.tsx` (slide-over wrapper), 13 `form-<provider>.tsx` files with provider-specific fields
+- **Data table:** `apps/dashboard/src/components/data-table/notifications/` — columns (name, provider badge, monitors, actions) + row actions (edit sheet, delete with confirmation)
+- **Config registry:** `apps/dashboard/src/data/notifications.client.ts` — maps provider → `{ icon, label, form }`
+- All data fetching via tRPC (`notification.list`, `notification.new`, `notification.updateNotifier`, `notification.delete`) using `@tanstack/react-query`
