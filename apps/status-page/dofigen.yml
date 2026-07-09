@@ -28,11 +28,12 @@ builders:
       SELF_HOST: "true"
     env:
       PATH: $PNPM_HOME:$PATH
+      NODE_OPTIONS: "--max-old-space-size=2048"
 
     run:
       - corepack enable
       - pnpm install --frozen-lockfile
-      - pnpm turbo run build --filter=@openstatus/status-page
+      - pnpm turbo run build --filter=@openstatus/status-page --concurrency=1
 
 # Runtime stage
 fromImage: node:24-slim

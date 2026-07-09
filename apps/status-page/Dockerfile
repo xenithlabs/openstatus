@@ -28,7 +28,8 @@ ARG \
     STRIPE_SECRET_KEY="test" \
     SELF_HOST="true"
 ENV \
-    PATH="$PNPM_HOME:$PATH"
+    PATH="$PNPM_HOME:$PATH" \
+    NODE_OPTIONS="--max-old-space-size=2048"
 WORKDIR /app
 COPY \
     --link \
@@ -36,7 +37,7 @@ COPY \
 RUN <<EOF
 corepack enable
 pnpm install --frozen-lockfile
-pnpm turbo run build --filter=@openstatus/status-page
+pnpm turbo run build --filter=@openstatus/status-page --concurrency=1
 EOF
 
 # runtime
