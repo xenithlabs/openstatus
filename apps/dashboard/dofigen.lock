@@ -1,6 +1,41 @@
 effective: |
   builders:
+    deps:
+      fromBuilder: deps-files
+      arg:
+        SELF_HOST: 'true'
+        DATABASE_AUTH_TOKEN: test
+        UNKEY_API_ID: test
+        CRON_SECRET: test
+        DATABASE_URL: http://libsql:8080
+        UPSTASH_REDIS_REST_URL: https://test.upstash.io
+        AUTH_SECRET: build-time-placeholder-min-32-chars-long
+        PROJECT_ID_VERCEL: test
+        OPENPANEL_CLIENT_SECRET: test
+        TINY_BIRD_API_KEY: ''
+        NODE_ENV: production
+        STRIPE_SECRET_KEY: test
+        NEXT_PUBLIC_URL: http://localhost:3002
+        TEAM_ID_VERCEL: test
+        VERCEL_AUTH_BEARER_TOKEN: test
+        NEXT_PUBLIC_OPENPANEL_CLIENT_ID: test
+        UNKEY_TOKEN: test
+        UPSTASH_REDIS_REST_TOKEN: test
+        RESEND_API_KEY: test
+      env:
+        PATH: $PNPM_HOME:$PATH
+      copy:
+      - paths:
+        - .
+        target: /app/
+        link: true
     builder:
+      fromBuilder: deps
+      env:
+        NODE_OPTIONS: --max-old-space-size=2048
+      run:
+      - pnpm turbo run build --filter=@openstatus/dashboard --concurrency=1
+    deps-files:
       fromImage:
         path: node
         digest: sha256:0afb7822fac7bf9d7c1bf3b6e6c496dee6b2b64d8dfa365501a3c68e8eba94b2
@@ -8,36 +43,38 @@ effective: |
         org.opencontainers.image.base.name: docker.io/node:24-slim
         org.opencontainers.image.base.digest: sha256:0afb7822fac7bf9d7c1bf3b6e6c496dee6b2b64d8dfa365501a3c68e8eba94b2
       workdir: /app
-      env:
-        NODE_ENV: production
-        TINY_BIRD_API_KEY: test
-        OPENPANEL_CLIENT_SECRET: test
-        NEXT_PUBLIC_URL: http://localhost:3002
-        PROJECT_ID_VERCEL: test
-        TEAM_ID_VERCEL: test
-        PATH: $PNPM_HOME:$PATH
-        DATABASE_AUTH_TOKEN: test
-        CRON_SECRET: test
-        DATABASE_URL: http://libsql:8080
-        RESEND_API_KEY: test
-        UPSTASH_REDIS_REST_URL: https://test.upstash.io
-        UNKEY_TOKEN: test
-        SELF_HOST: 'true'
-        UNKEY_API_ID: test
-        STRIPE_SECRET_KEY: test
-        NEXT_PUBLIC_OPENPANEL_CLIENT_ID: test
-        AUTH_SECRET: build-time-placeholder-min-32-chars-long
-        UPSTASH_REDIS_REST_TOKEN: test
-        VERCEL_AUTH_BEARER_TOKEN: test
+      arg:
         PNPM_HOME: /pnpm
+      env:
+        PATH: $PNPM_HOME:$PATH
       copy:
       - paths:
-        - .
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+        - package.json
+        target: /app/
+      - paths:
+        - apps/*/package.json
+        target: /app/
+      - paths:
+        - packages/*/package.json
+        target: /app/
+      - paths:
+        - packages/*/*/package.json
         target: /app/
       run:
       - corepack enable
       - pnpm install --frozen-lockfile
-      - pnpm turbo run build --filter=@openstatus/dashboard
+    typecheck:
+      fromBuilder: deps
+      env:
+        NODE_OPTIONS: --max-old-space-size=4096
+      run:
+      - pnpm turbo run typecheck --filter=@openstatus/dashboard --concurrency=1
+    deps-check:
+      fromBuilder: deps-files
+      run:
+      - echo "deps-files cache valid"
   fromImage:
     path: node
     digest: sha256:0afb7822fac7bf9d7c1bf3b6e6c496dee6b2b64d8dfa365501a3c68e8eba94b2
@@ -54,19 +91,35 @@ effective: |
     paths:
     - /app/apps/dashboard/.next/standalone/apps/dashboard/
     target: ./
+    chown:
+      user: '1000'
+      group: '1000'
     chmod: '555'
+    link: true
   - fromBuilder: builder
     paths:
     - /app/node_modules/
     target: /app/node_modules/
+    chown:
+      user: '1000'
+      group: '1000'
+    link: true
   - fromBuilder: builder
     paths:
     - /app/apps/dashboard/.next/static/
     target: ./.next/static/
+    chown:
+      user: '1000'
+      group: '1000'
+    link: true
   - fromBuilder: builder
     paths:
     - /app/apps/dashboard/public/
     target: ./public/
+    chown:
+      user: '1000'
+      group: '1000'
+    link: true
   root:
     run:
     - apt-get update
@@ -91,81 +144,147 @@ images:
           digest: sha256:0afb7822fac7bf9d7c1bf3b6e6c496dee6b2b64d8dfa365501a3c68e8eba94b2
 resources:
   dofigen.yml:
-    hash: 72276183896ed0df05dbf54946741d0b4348a3dafc1d70c1e3b5e64a76eedc11
+    hash: ddf47957e899b0d75d0155964f33318d15544b527ddaf2d90e70f6f5a1c3e10a
     content: |
+      # NOTE: After regenerating the Dockerfile with dofigen, you must manually:
+      #   1. Change `# syntax=docker/dockerfile:1.19.0` to `1.7-labs`
+      #   2. Add `--parents` to the three glob COPY instructions in deps-files
       builders:
-        # Stage 1: Next.js build with Node.js
-        builder:
-          fromImage: node:24-slim
+        # ── deps-files: lockfile + all workspace package.json (highly cacheable) ──
+        # This stage invalidates only when pnpm-lock.yaml or any package.json changes.
+        # docker build --target deps-files -q .  → "cached" or rebuild
+        deps-files:
+          fromImage:
+            path: node
+            tag: 24-slim
           workdir: /app
-          copy:
-            - . /app/
-          env:
-            NODE_ENV: production
+          arg:
             PNPM_HOME: /pnpm
+          env:
             PATH: $PNPM_HOME:$PATH
-            # Build-time environment variables (placeholder values, overwritten by .env.docker at runtime)
-            DATABASE_URL: http://libsql:8080
-            DATABASE_AUTH_TOKEN: test
-            NEXT_PUBLIC_OPENPANEL_CLIENT_ID: test
-            NEXT_PUBLIC_URL: http://localhost:3002
-            TEAM_ID_VERCEL: test
-            PROJECT_ID_VERCEL: test
-            VERCEL_AUTH_BEARER_TOKEN: test
-            OPENPANEL_CLIENT_SECRET: test
-            RESEND_API_KEY: test
-            UPSTASH_REDIS_REST_URL: https://test.upstash.io
-            UPSTASH_REDIS_REST_TOKEN: test
-            UNKEY_TOKEN: test
-            UNKEY_API_ID: test
-            TINY_BIRD_API_KEY: test
-            CRON_SECRET: test
-            STRIPE_SECRET_KEY: test
-            AUTH_SECRET: build-time-placeholder-min-32-chars-long
-            SELF_HOST: "true"
+          copy:
+            - paths:
+                - pnpm-lock.yaml
+                - pnpm-workspace.yaml
+                - package.json
+              target: /app/
+            - paths:
+                - apps/*/package.json
+              target: /app/
+            - paths:
+                - packages/*/package.json
+              target: /app/
+            - paths:
+                - packages/*/*/package.json
+              target: /app/
           run:
             - corepack enable
             - pnpm install --frozen-lockfile
-            - pnpm turbo run build --filter=@openstatus/dashboard
 
-      # Runtime stage
-      fromImage: node:24-slim
+        # ── deps: full source (inherits deps-files cache) ──
+        deps:
+          fromBuilder: deps-files
+          arg:
+            AUTH_SECRET: build-time-placeholder-min-32-chars-long
+            CRON_SECRET: test
+            DATABASE_AUTH_TOKEN: test
+            DATABASE_URL: http://libsql:8080
+            NEXT_PUBLIC_OPENPANEL_CLIENT_ID: test
+            NEXT_PUBLIC_URL: http://localhost:3002
+            NODE_ENV: production
+            OPENPANEL_CLIENT_SECRET: test
+            PROJECT_ID_VERCEL: test
+            RESEND_API_KEY: test
+            SELF_HOST: "true"
+            STRIPE_SECRET_KEY: test
+            TEAM_ID_VERCEL: test
+            TINY_BIRD_API_KEY: ""
+            UNKEY_API_ID: test
+            UNKEY_TOKEN: test
+            UPSTASH_REDIS_REST_TOKEN: test
+            UPSTASH_REDIS_REST_URL: https://test.upstash.io
+            VERCEL_AUTH_BEARER_TOKEN: test
+          env:
+            PATH: $PNPM_HOME:$PATH
+          copy:
+            - paths:
+                - .
+              target: /app/
+              link: true
+
+        # ── deps-check: fingerprint stage to check if deps-files cache is valid ──
+        deps-check:
+          fromBuilder: deps-files
+          run:
+            - echo "deps-files cache valid"
+
+        # ── typecheck: optional, runs tsc with high heap ──
+        typecheck:
+          fromBuilder: deps
+          env:
+            NODE_OPTIONS: --max-old-space-size=4096
+          run:
+            - pnpm turbo run typecheck --filter=@openstatus/dashboard --concurrency=1
+
+        # ── builder: main build, skips tsc via ignoreBuildErrors ──
+        builder:
+          fromBuilder: deps
+          env:
+            NODE_OPTIONS: --max-old-space-size=2048
+          run:
+            - pnpm turbo run build --filter=@openstatus/dashboard --concurrency=1
+
+      # ── runtime: production image ──
+      fromImage:
+        path: node
+        tag: 24-slim
       workdir: /app/apps/dashboard
-
-      # Copy artifacts from builder
       copy:
-        # Copy Next.js standalone output
         - fromBuilder: builder
-          source: /app/apps/dashboard/.next/standalone/apps/dashboard/
+          paths:
+            - /app/apps/dashboard/.next/standalone/apps/dashboard/
           target: ./
+          chown:
+            user: "1000"
+            group: "1000"
           chmod: "555"
-        # Copy root node_modules (required for pnpm symlinks)
+          link: true
         - fromBuilder: builder
-          source: /app/node_modules/
+          paths:
+            - /app/node_modules/
           target: /app/node_modules/
-        # Copy static assets
+          chown:
+            user: "1000"
+            group: "1000"
+          link: true
         - fromBuilder: builder
-          source: /app/apps/dashboard/.next/static/
+          paths:
+            - /app/apps/dashboard/.next/static/
           target: ./.next/static/
-        # Copy public directory
+          chown:
+            user: "1000"
+            group: "1000"
+          link: true
         - fromBuilder: builder
-          source: /app/apps/dashboard/public/
+          paths:
+            - /app/apps/dashboard/public/
           target: ./public/
+          chown:
+            user: "1000"
+            group: "1000"
+          link: true
 
-      # Install curl for health checks
       root:
         run:
           - apt-get update
           - apt-get install -y --no-install-recommends curl
           - rm -rf /var/lib/apt/lists/*
 
-      # Security: run as non-root user
       user: "1000:1000"
 
-      # Expose port
-      expose: "3000"
+      expose:
+        - port: 3000
 
-      # Health check
       healthcheck:
         interval: 30s
         timeout: 10s
@@ -173,7 +292,6 @@ resources:
         retries: 3
         cmd: curl -f http://localhost:3000/ || exit 1
 
-      # Start application
       cmd:
         - node
         - server.js

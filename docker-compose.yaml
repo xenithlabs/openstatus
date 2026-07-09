@@ -408,11 +408,32 @@ services:
             start_period: 30s
         restart: unless-stopped
 
+    dashboard-deps-check:
+        container_name: openstatus-dashboard-deps-check
+        build:
+            context: .
+            dockerfile: apps/dashboard/Dockerfile
+            target: deps-check
+        image: openstatus/dashboard-deps-check:latest
+        profiles: ["deps-check"]
+        restart: "no"
+
+    dashboard-typecheck:
+        container_name: openstatus-dashboard-typecheck
+        build:
+            context: .
+            dockerfile: apps/dashboard/Dockerfile
+            target: typecheck
+        image: openstatus/dashboard-typecheck:latest
+        profiles: ["typecheck"]
+        restart: "no"
+
     dashboard:
         container_name: openstatus-dashboard
         build:
             context: .
             dockerfile: apps/dashboard/Dockerfile
+            target: runtime
             args:
                 - NODE_ENV=production
                 - PNPM_HOME=/pnpm
@@ -474,11 +495,32 @@ services:
             start_period: 45s
         restart: unless-stopped
 
+    status-page-deps-check:
+        container_name: openstatus-status-page-deps-check
+        build:
+            context: .
+            dockerfile: apps/status-page/Dockerfile
+            target: deps-check
+        image: openstatus/status-page-deps-check:latest
+        profiles: ["deps-check"]
+        restart: "no"
+
+    status-page-typecheck:
+        container_name: openstatus-status-page-typecheck
+        build:
+            context: .
+            dockerfile: apps/status-page/Dockerfile
+            target: typecheck
+        image: openstatus/status-page-typecheck:latest
+        profiles: ["typecheck"]
+        restart: "no"
+
     status-page:
         container_name: openstatus-status-page
         build:
             context: .
             dockerfile: apps/status-page/Dockerfile
+            target: runtime
             args:
                 - NODE_ENV=production
                 - PNPM_HOME=/pnpm

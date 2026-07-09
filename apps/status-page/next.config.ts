@@ -38,6 +38,11 @@ const withNextIntl = createNextIntlPlugin({
 
 const nextConfig: NextConfig = {
   output: process.env.SELF_HOST === "true" ? "standalone" : undefined,
+  // Disable build-time TS checking to avoid OOM in Docker builds.
+  // Type-checking is done separately via `tsc --noEmit` in CI.
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   experimental: {
     authInterrupts: true,
   },

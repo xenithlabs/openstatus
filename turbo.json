@@ -31,6 +31,10 @@
       ],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
+    "typecheck": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
     "lint": {},
     "dev": {
       "cache": false
