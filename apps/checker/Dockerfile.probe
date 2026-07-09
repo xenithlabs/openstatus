@@ -1,37 +1,39 @@
+# syntax=docker/dockerfile:1.19.0
+
+# builder
 FROM golang:1.25-alpine AS builder
+ARG TARGETARCH
+ARG TARGETOS
 
 WORKDIR /go/src/app
 COPY ca/ca-bundle.crt /usr/local/share/ca-certificates/ca-bundle.crt
 
 RUN apk update \
 && apk upgrade --available \
-&& update-ca-certificates
+&& update-ca-certificates \
+&& apk add --no-cache tzdata
 
-RUN apk add --no-cache tzdata
-ENV TZ=UTC
-
-ENV CGO_ENABLED=0
-ENV GOOS=linux
-ENV GOARCH=amd64
+ENV \
+    TZ="UTC" \
+    CGO_ENABLED="0"
 
 COPY go.* .
 RUN go mod download
 
 COPY . .
-RUN go build -trimpath -ldflags "-s -w" -o /tmp/probe ./cmd/private/main.go
+RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldflags "-s -w" -o /tmp/probe ./cmd/private/main.go
 
-FROM alpine:3.21
+# runtime
+FROM alpine:3.21 AS runtime
 
 WORKDIR /opt/bin
 
 COPY --from=builder /usr/local/share/ca-certificates/ca-bundle.crt /etc/ssl/certs/ca-bundle.crt
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
-
 COPY --from=builder /tmp/probe /opt/bin/probe
 
-ENV TZ=UTC
+ENV TZ="UTC"
 
 USER 1000:1000
 
