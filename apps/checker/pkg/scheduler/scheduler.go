@@ -3,7 +3,6 @@ package scheduler
 import (
 	"context"
 	"log"
-	"sync"
 	"time"
 
 	"connectrpc.com/connect"
@@ -20,19 +19,22 @@ const (
 	Interval10m = "10m"
 	Interval30m = "30m"
 	Interval1h  = "1h"
+
+	rpcTimeout = 30 * time.Second
 )
 
 type MonitorManager struct {
 	Client    v1.PrivateLocationServiceClient
 	JobRunner job.JobRunner
 	Scheduler *tasks.Scheduler
-	mu        sync.Mutex
 }
 
 // UpdateMonitors fetches the latest monitors and starts/stops jobs as needed.
 // Returns the config refresh interval (in minutes) from the server, or 10 if unset.
 func (mm *MonitorManager) UpdateMonitors(ctx context.Context) int32 {
-	res, err := mm.Client.Monitors(ctx, &connect.Request[v1.MonitorsRequest]{})
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+	res, err := mm.Client.Monitors(rpcCtx, &connect.Request[v1.MonitorsRequest]{})
 	if err != nil {
 		log.Printf("Failed to fetch monitors: %v", err)
 		return 10
@@ -45,183 +47,180 @@ func (mm *MonitorManager) UpdateMonitors(ctx context.Context) int32 {
 
 	currentIDs := make(map[string]struct{})
 
-	// HTTP monitors: start jobs for new monitors
+	// HTTP monitors: replace stale tasks with latest config
 	for _, m := range res.Msg.HttpMonitors {
 		currentIDs[m.Id] = struct{}{}
-		_, err := mm.Scheduler.Lookup(m.Id)
+		if _, err := mm.Scheduler.Lookup(m.Id); err == nil {
+			mm.Scheduler.Del(m.Id)
+		}
+
+		interval := time.Duration(intervalToSecond(m.Periodicity)) * time.Second
+		task := tasks.Task{
+			Interval:          interval,
+			RunOnce:           false,
+			RunSingleInstance: true,
+			ErrFunc: func(e error) {
+				log.Printf("An error occurred when executing task  %s", e)
+			},
+			FuncWithTaskContext: func(ctx tasks.TaskContext) error {
+				monitor := m
+				c := context.Background()
+				log.Printf("Starting job for monitor %s (%s)", monitor.Id, monitor.Url)
+				data, err := mm.JobRunner.HTTPJob(c, monitor)
+
+				if err != nil {
+					log.Printf("Monitor check failed for %s (%s): %v", monitor.Id, monitor.Url, err)
+					return err
+				}
+				resp, ingestErr := mm.Client.IngestHTTP(c, &connect.Request[v1.IngestHTTPRequest]{
+					Msg: &v1.IngestHTTPRequest{
+						MonitorId:     monitor.Id,
+						Id:            data.ID,
+						Url:           monitor.Url,
+						Message:       data.Message,
+						Latency:       data.Latency,
+						Timing:        data.Timing,
+						Headers:       data.Headers,
+						Body:          data.Body,
+						RequestStatus: data.RequestStatus,
+						StatusCode:    int64(data.StatusCode),
+						Error:         int64(data.Error),
+						CronTimestamp: data.CronTimestamp,
+						Timestamp:     data.Timestamp,
+						Resolver:      data.Resolver,
+					},
+				})
+				if ingestErr != nil {
+					log.Printf("Failed to ingest HTTP result for %s (%s): %v", monitor.Id, monitor.Url, ingestErr)
+					return ingestErr
+				}
+				log.Printf("Monitor check succeeded for %s (%s), ingest response: %v", monitor.Id, monitor.Url, resp)
+				return nil
+			},
+		}
+
+		err := mm.Scheduler.AddWithID(m.Id, &task)
+
 		if err != nil {
-			interval := time.Duration(intervalToSecond(m.Periodicity)) * time.Second
-			task := tasks.Task{
-				Interval:          interval,
-				RunOnce:           false,
-				RunSingleInstance: true,
-				// StartAfter: time.Duration(1) * time.Second,
-				ErrFunc: func(e error) {
-					log.Printf("An error occurred when executing task  %s", e)
-				},
-				FuncWithTaskContext: func(ctx tasks.TaskContext) error {
-					monitor := m
-					c := context.Background()
-					log.Printf("Starting job for monitor %s (%s)", monitor.Id, monitor.Url)
-					data, err := mm.JobRunner.HTTPJob(c, monitor)
-
-					if err != nil {
-						log.Printf("Monitor check failed for %s (%s): %v", monitor.Id, monitor.Url, err)
-						return err
-					}
-					resp, ingestErr := mm.Client.IngestHTTP(c, &connect.Request[v1.IngestHTTPRequest]{
-						Msg: &v1.IngestHTTPRequest{
-							MonitorId:     monitor.Id,
-							Id:            data.ID,
-							Url:           monitor.Url,
-							Message:       data.Message,
-							Latency:       data.Latency,
-							Timing:        data.Timing,
-							Headers:       data.Headers,
-							Body:          data.Body,
-							RequestStatus: data.RequestStatus,
-							StatusCode:    int64(data.StatusCode),
-							Error:         int64(data.Error),
-							CronTimestamp: data.CronTimestamp,
-							Timestamp:     data.Timestamp,
-							Resolver:      data.Resolver,
-						},
-					})
-					if ingestErr != nil {
-						log.Printf("Failed to ingest HTTP result for %s (%s): %v", monitor.Id, monitor.Url, ingestErr)
-						return ingestErr
-					}
-					log.Printf("Monitor check succeeded for %s (%s), ingest response: %v", monitor.Id, monitor.Url, resp)
-					return nil
-				},
-			}
-
-			err := mm.Scheduler.AddWithID(m.Id, &task)
-
-			if err != nil {
-				log.Printf("Failed to add HTTP monitor job for %s (%s): %v", m.Id, m.Url, err)
-				continue
-			}
-			log.Printf("Started monitoring job for %s (%s)", m.Id, m.Url)
+			log.Printf("Failed to add HTTP monitor job for %s (%s): %v", m.Id, m.Url, err)
 			continue
 		}
-
+		log.Printf("Started monitoring job for %s (%s)", m.Id, m.Url)
 	}
 
-	// TCP monitors: start jobs for new monitors
+	// TCP monitors: replace stale tasks with latest config
 	for _, m := range res.Msg.TcpMonitors {
 		currentIDs[m.Id] = struct{}{}
-		_, err := mm.Scheduler.Lookup(m.Id)
-		if err != nil {
-
-			interval := time.Duration(intervalToSecond(m.Periodicity)) * time.Second
-			task := tasks.Task{
-				Interval: interval,
-				RunOnce:  false,
-				// StartAfter: time.Now().Add(5 * time.Millisecond),
-				RunSingleInstance: true,
-				FuncWithTaskContext: func(ctx tasks.TaskContext) error {
-
-					monitor := m
-					c := context.Background()
-					log.Printf("Starting TCP job for monitor %s (%s)", monitor.Id, monitor.Uri)
-					data, err := mm.JobRunner.TCPJob(c, monitor)
-					if err != nil {
-						log.Printf("TCP monitor check failed for %s (%s): %v", monitor.Id, monitor.Uri, err)
-					}
-					resp, ingestErr := mm.Client.IngestTCP(c, &connect.Request[v1.IngestTCPRequest]{
-						Msg: &v1.IngestTCPRequest{
-							MonitorId:     monitor.Id,
-							Id:            data.ID,
-							Uri:           monitor.Uri,
-							Message:       data.Message,
-							Latency:       data.Latency,
-							RequestStatus: data.RequestStatus,
-							Error:         int64(data.Error),
-							CronTimestamp: data.CronTimestamp,
-							Timestamp:     data.Timestamp,
-							Timing:        data.Timing,
-							Resolver:      data.Resolver,
-						},
-					})
-					if ingestErr != nil {
-						log.Printf("Failed to ingest TCP result for %s (%s): %v", monitor.Id, monitor.Uri, ingestErr)
-						return ingestErr
-					}
-					log.Printf("TCP monitor check succeeded for %s (%s), ingest response: %v", monitor.Id, monitor.Uri, resp)
-
-					return nil
-				},
-			}
-			err := mm.Scheduler.AddWithID(m.Id, &task)
-
-			if err != nil {
-				log.Printf("Failed to add TCP monitor job for %s (%s): %v", m.Id, m.Uri, err)
-				continue
-			}
-			log.Printf("Started TCP monitoring job for %s (%s)", m.Id, m.Uri)
+		if _, err := mm.Scheduler.Lookup(m.Id); err == nil {
+			mm.Scheduler.Del(m.Id)
 		}
+
+		interval := time.Duration(intervalToSecond(m.Periodicity)) * time.Second
+		task := tasks.Task{
+			Interval:          interval,
+			RunOnce:           false,
+			RunSingleInstance: true,
+			FuncWithTaskContext: func(ctx tasks.TaskContext) error {
+				monitor := m
+				c := context.Background()
+				log.Printf("Starting TCP job for monitor %s (%s)", monitor.Id, monitor.Uri)
+				data, err := mm.JobRunner.TCPJob(c, monitor)
+				if err != nil {
+					log.Printf("TCP monitor check failed for %s (%s): %v", monitor.Id, monitor.Uri, err)
+				}
+				resp, ingestErr := mm.Client.IngestTCP(c, &connect.Request[v1.IngestTCPRequest]{
+					Msg: &v1.IngestTCPRequest{
+						MonitorId:     monitor.Id,
+						Id:            data.ID,
+						Uri:           monitor.Uri,
+						Message:       data.Message,
+						Latency:       data.Latency,
+						RequestStatus: data.RequestStatus,
+						Error:         int64(data.Error),
+						CronTimestamp: data.CronTimestamp,
+						Timestamp:     data.Timestamp,
+						Timing:        data.Timing,
+						Resolver:      data.Resolver,
+					},
+				})
+				if ingestErr != nil {
+					log.Printf("Failed to ingest TCP result for %s (%s): %v", monitor.Id, monitor.Uri, ingestErr)
+					return ingestErr
+				}
+				log.Printf("TCP monitor check succeeded for %s (%s), ingest response: %v", monitor.Id, monitor.Uri, resp)
+
+				return nil
+			},
+		}
+		err := mm.Scheduler.AddWithID(m.Id, &task)
+
+		if err != nil {
+			log.Printf("Failed to add TCP monitor job for %s (%s): %v", m.Id, m.Uri, err)
+			continue
+		}
+		log.Printf("Started TCP monitoring job for %s (%s)", m.Id, m.Uri)
 	}
 
+	// DNS monitors: replace stale tasks with latest config
 	for _, m := range res.Msg.DnsMonitors {
 		currentIDs[m.Id] = struct{}{}
-		_, err := mm.Scheduler.Lookup(m.Id)
-		if err != nil {
-
-			interval := time.Duration(intervalToSecond(m.Periodicity)) * time.Second
-			task := tasks.Task{
-				Interval: interval,
-				RunOnce:  false,
-				RunSingleInstance: true,
-				FuncWithTaskContext: func(ctx tasks.TaskContext) error {
-					monitor := m
-					c := context.Background()
-					log.Printf("Starting DNS job for monitor %s (%s)", monitor.Id, monitor.Uri)
-					data, err := mm.JobRunner.DNSJob(c, monitor)
-					if err != nil {
-						log.Printf("DNS monitor check failed for %s (%s): %v", monitor.Id, monitor.Uri, err)
-					}
-
-					records := make(map[string]*v1.Records)
-					if data != nil {
-						for k, v := range data.Records {
-							records[k] = &v1.Records{Record: v}
-						}
-					}
-
-					resp, ingestErr := mm.Client.IngestDNS(c, &connect.Request[v1.IngestDNSRequest]{
-						Msg: &v1.IngestDNSRequest{
-							MonitorId:     monitor.Id,
-							Id:            data.ID,
-							Uri:           monitor.Uri,
-							Message:       data.Message,
-							Latency:       data.Latency,
-							RequestStatus: data.RequestStatus,
-							Error:         int64(data.Error),
-							CronTimestamp: data.CronTimestamp,
-							Timestamp:     data.Timestamp,
-							Timing:        data.Timing,
-							Records:       records,
-							Resolver:      data.Resolver,
-						},
-					})
-					if ingestErr != nil {
-						log.Printf("Failed to ingest DNS result for %s (%s): %v", monitor.Id, monitor.Uri, ingestErr)
-						return ingestErr
-					}
-					log.Printf("DNS monitor check succeeded for %s (%s), ingest response: %v", monitor.Id, monitor.Uri, resp)
-
-					return nil
-				},
-			}
-			err := mm.Scheduler.AddWithID(m.Id, &task)
-
-			if err != nil {
-				log.Printf("Failed to add DNS monitor job for %s (%s): %v", m.Id, m.Uri, err)
-				continue
-			}
-			log.Printf("Started DNS monitoring job for %s (%s)", m.Id, m.Uri)
+		if _, err := mm.Scheduler.Lookup(m.Id); err == nil {
+			mm.Scheduler.Del(m.Id)
 		}
+
+		interval := time.Duration(intervalToSecond(m.Periodicity)) * time.Second
+		task := tasks.Task{
+			Interval:          interval,
+			RunOnce:           false,
+			RunSingleInstance: true,
+			FuncWithTaskContext: func(ctx tasks.TaskContext) error {
+				monitor := m
+				c := context.Background()
+				log.Printf("Starting DNS job for monitor %s (%s)", monitor.Id, monitor.Uri)
+				data, err := mm.JobRunner.DNSJob(c, monitor)
+				if err != nil {
+					log.Printf("DNS monitor check failed for %s (%s): %v", monitor.Id, monitor.Uri, err)
+				}
+
+				records := make(map[string]*v1.Records)
+				if data != nil {
+					for k, v := range data.Records {
+						records[k] = &v1.Records{Record: v}
+					}
+				}
+
+				resp, ingestErr := mm.Client.IngestDNS(c, &connect.Request[v1.IngestDNSRequest]{
+					Msg: &v1.IngestDNSRequest{
+						MonitorId:     monitor.Id,
+						Id:            data.ID,
+						Uri:           monitor.Uri,
+						Message:       data.Message,
+						Latency:       data.Latency,
+						RequestStatus: data.RequestStatus,
+						Error:         int64(data.Error),
+						CronTimestamp: data.CronTimestamp,
+						Timestamp:     data.Timestamp,
+						Timing:        data.Timing,
+						Records:       records,
+						Resolver:      data.Resolver,
+					},
+				})
+				if ingestErr != nil {
+					log.Printf("Failed to ingest DNS result for %s (%s): %v", monitor.Id, monitor.Uri, ingestErr)
+					return ingestErr
+				}
+				log.Printf("DNS monitor check succeeded for %s (%s), ingest response: %v", monitor.Id, monitor.Uri, resp)
+
+				return nil
+			},
+		}
+		err := mm.Scheduler.AddWithID(m.Id, &task)
+
+		if err != nil {
+			log.Printf("Failed to add DNS monitor job for %s (%s): %v", m.Id, m.Uri, err)
+			continue
+		}
+		log.Printf("Started DNS monitoring job for %s (%s)", m.Id, m.Uri)
 	}
 
 	for id := range mm.Scheduler.Tasks() {
@@ -250,6 +249,7 @@ func intervalToSecond(interval string) int {
 	case Interval10s:
 		return 10
 	default:
-		return 0
+		log.Printf("unrecognized periodicity %q, falling back to 60s", interval)
+		return 60
 	}
 }

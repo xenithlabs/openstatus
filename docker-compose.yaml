@@ -319,7 +319,7 @@ services:
         env_file:
             - .env.docker
         environment:
-            - OPENSTATUS_KEY=${OPENSTATUS_KEY:-}
+            - OPENSTATUS_KEY=${PRIVATE_LOCATION_TOKEN:-${OPENSTATUS_KEY:-}}
             - OPENSTATUS_INGEST_URL=http://private-location:8080
             - LOG_LEVEL=debug
         depends_on:
@@ -338,7 +338,7 @@ services:
         env_file:
             - .env.docker
         environment:
-            - OPENSTATUS_KEY=${OPENSTATUS_KEY_2:-}
+            - OPENSTATUS_KEY=${PRIVATE_LOCATION_TOKEN_2:-${OPENSTATUS_KEY_2:-}}
             - OPENSTATUS_INGEST_URL=http://private-location:8080
             - LOG_LEVEL=debug
         depends_on:
@@ -357,7 +357,7 @@ services:
         env_file:
             - .env.docker
         environment:
-            - OPENSTATUS_KEY=${OPENSTATUS_KEY_3:-}
+            - OPENSTATUS_KEY=${PRIVATE_LOCATION_TOKEN_3:-${OPENSTATUS_KEY_3:-}}
             - OPENSTATUS_INGEST_URL=http://private-location:8080
             - LOG_LEVEL=debug
         depends_on:
@@ -441,7 +441,7 @@ services:
             - "127.0.0.1:3002:3000"
         labels:
             - traefik.enable=true
-            - traefik.http.routers.dashboard.rule=Host(`openstatus.open.status`)
+            - traefik.http.routers.dashboard.rule=Host(`openstatus.openstat.us`)
             - traefik.http.routers.dashboard.entrypoints=web,websecure
             - traefik.http.routers.dashboard.tls=true
             - traefik.http.services.dashboard.loadbalancer.server.port=3000
@@ -506,7 +506,7 @@ services:
             - "127.0.0.1:3003:3000"
         labels:
             - traefik.enable=true
-            - traefik.http.routers.status-page.rule=Host(`status.open.status`)
+            - traefik.http.routers.status-page.rule=Host(`status.openstat.us`)
             - traefik.http.routers.status-page.entrypoints=web,websecure
             - traefik.http.routers.status-page.tls=true
             - traefik.http.services.status-page.loadbalancer.server.port=3000
@@ -516,7 +516,7 @@ services:
             - PORT=3000
             - HOSTNAME=0.0.0.0
             - AUTH_TRUST_HOST=true
-            - STATUS_PAGE_CUSTOM_DOMAIN=status.open.status
+            - STATUS_PAGE_CUSTOM_DOMAIN=status.openstat.us
             - CHECKER_URL=http://checker:8080
             - UPSTASH_REDIS_REST_URL=http://redis-http:80
             - UPSTASH_REDIS_REST_TOKEN=${UPSTASH_REDIS_REST_TOKEN:-replace-with-a-long-random-secret}

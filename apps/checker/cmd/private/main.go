@@ -17,10 +17,6 @@ import (
 	v1 "github.com/openstatushq/openstatus/apps/checker/proto/private_location/v1"
 )
 
-const (
-	defaultConfigRefreshInterval = 10 * time.Minute
-)
-
 func main() {
 	logLevel := getEnv("LOG_LEVEL", "info")
 	setupLogger(logLevel)
@@ -32,7 +28,6 @@ func main() {
 		"ingest_url", ingestUrl,
 		"has_key", apiKey != "",
 		"log_level", logLevel,
-		"config_refresh_interval", defaultConfigRefreshInterval.String(),
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -96,8 +91,11 @@ func getEnv(key, fallback string) string {
 }
 
 func getClient(apiKey string, ingestUrl string) v1.PrivateLocationServiceClient {
+	httpClient := &http.Client{
+		Timeout: 30 * time.Second,
+	}
 	client := v1.NewPrivateLocationServiceClient(
-		http.DefaultClient,
+		httpClient,
 		ingestUrl,
 		connect.WithHTTPGet(),
 		connect.WithInterceptors(NewAuthInterceptor(apiKey)),
