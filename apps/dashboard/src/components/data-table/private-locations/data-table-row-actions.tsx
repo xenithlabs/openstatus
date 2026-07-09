@@ -60,7 +60,9 @@ export function DataTableRowActions(props: DataTableRowActionsProps) {
         defaultValues={{
           name: props.row.original.name,
           token: props.row.original.token.toString(),
-          monitors: props.row.original.monitors.map((m) => m.id),
+          monitors: props.row.original.monitors
+            .filter((m): m is NonNullable<typeof m> => m !== null)
+            .map((m) => m.id),
           configRefreshIntervalMinutes:
             (props.row.original as unknown as Record<string, unknown>)
               .configRefreshIntervalMinutes as number | undefined ?? 10,

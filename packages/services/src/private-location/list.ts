@@ -7,7 +7,7 @@ import { ListPrivateLocationsInput } from "./schemas";
 /**
  * List private locations in the caller's workspace, each one flattened to
  * include the monitors it's attached to (the relational join's `monitor`
- * link lifted onto `monitors`, filtered to non-null).
+ * link lifted onto `monitors`, filtered to non-null and non-deleted).
  *
  * Return type is deliberately inferred from drizzle's relational query
  * rather than annotated: pulling the shape out of `@openstatus/db`'s
@@ -33,7 +33,13 @@ export async function listPrivateLocations(args: {
   return rows.map((row) => ({
     ...row,
     monitors: row.privateLocationToMonitors
+      .filter((link) => link.deletedAt === null)
       .map((link) => link.monitor)
-      .filter((m) => m !== null),
+      .filter(
+        (m) =>
+          m !== null &&
+          m.deletedAt === null &&
+          m.workspaceId === args.ctx.workspace.id,
+      ),
   }));
 }
