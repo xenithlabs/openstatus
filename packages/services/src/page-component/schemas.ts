@@ -66,7 +66,7 @@ export const GetPageComponentDailySummaryInput = z.object({
   pageId: z.number().int(),
   workspaceId: z.number().int(),
   componentIds: z.array(z.number().int()).optional(),
-  days: z.number().int().min(1).max(45).optional(),
+  days: z.number().int().min(1).max(90).optional(),
 });
 export type GetPageComponentDailySummaryInput = z.infer<
   typeof GetPageComponentDailySummaryInput

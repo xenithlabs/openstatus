@@ -228,6 +228,26 @@ docker compose ps tinybird-local
 docker compose logs tinybird-local --tail 50
 ```
 
+### Token mismatch after `.env.docker` update
+
+**Symptom:** `private-location` or `checker` containers log `403 Invalid token` on Tinybird writes, while `server` and `workflows` work fine.
+
+**Cause:** `.env.docker` was updated (e.g., after re-running the init script) but some containers were never recreated. Docker Compose reads `env_file` values at container creation time — containers started before the update hold the old, now-invalid token.
+
+**Diagnose:** Compare tokens across containers:
+```sh
+docker exec openstatus-private-location env | grep TINY_BIRD_API_KEY
+docker exec openstatus-server env | grep TINY_BIRD_API_KEY
+grep TINY_BIRD_API_KEY .env.docker
+```
+
+If they differ, the stale containers need recreation:
+```sh
+docker compose up -d --force-recreate checker private-location private-probe private-probe-2 private-probe-3
+```
+
+**Prevention:** After updating `.env.docker`, always recreate affected services or run `docker compose up -d` to apply changes.
+
 ### "Authentication failed" when pushing
 
 The admin token may have changed. Re-extract and re-run with the token:
@@ -294,6 +314,29 @@ docker compose up -d tinybird-local
 ```
 
 ---
+
+### Repopulating materialized views after token fix
+
+If writes were failing due to an auth issue (see token mismatch above), materialized
+views will have gaps. The Classic-mode Tinybird container (`COMPATIBILITY_MODE=1`)
+does not expose `tb pipe populate` — instead, use the repopulation script:
+
+```sh
+chmod +x scripts/repopulate-tinybird-mvs.sh
+./scripts/repopulate-tinybird-mvs.sh
+```
+
+The script fetches each materialized pipe's current SQL and target datasource from
+the API, truncates the MV, and recreates the pipe node — which resets the append
+offset so all historical raw data is reprocessed. All 41 materialized pipes are
+covered (HTTP, TCP, DNS, external status).
+
+Check progress:
+```sh
+curl "http://localhost:7181/v0/sql" \
+  -H "Authorization: Bearer $TINY_BIRD_API_KEY" \
+  -d "SELECT count() FROM mv__http_14d__v1"
+```
 
 ## Verification Checklist
 

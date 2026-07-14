@@ -25,6 +25,7 @@ TB_URL="http://${TB_SERVICE}:${TB_PORT}"
 NETWORK="${NETWORK:-openstatus}"
 PROJECT_DIR="${PROJECT_DIR:-packages/tinybird}"
 PROJECT_DIR_ABS="$(cd "$(dirname "$0")/.." && pwd)/packages/tinybird"
+ENV_FILE="${ENV_FILE:-.env.docker}"
 RETRY_MAX="${RETRY_MAX:-30}"
 RETRY_INTERVAL="${RETRY_INTERVAL:-2}"
 
@@ -233,6 +234,88 @@ print(len(endpoints))
     log_info "Endpoints deployed: $result"
 }
 
+# ---- Read token from .env.docker ----
+read_env_token() {
+    local env_file="$1"
+    if [ ! -f "$env_file" ]; then
+        echo ""
+        return 0
+    fi
+    grep -E '^TINY_BIRD_API_KEY=' "$env_file" 2>/dev/null | \
+        sed 's/^TINY_BIRD_API_KEY=//' | xargs 2>/dev/null || echo ""
+}
+
+# ---- Update token in .env.docker ----
+update_env_token() {
+    local env_file="$1"
+    local new_token="$2"
+
+    if [ "$(uname)" = "Darwin" ]; then
+        sed -i '' -E "s|^(TINY_BIRD_API_KEY=).*|\1${new_token}|" "$env_file"
+        sed -i '' -E "s|^(TINYBIRD_TOKEN=).*|\1${new_token}|" "$env_file"
+    else
+        sed -i -E "s|^(TINY_BIRD_API_KEY=).*|\1${new_token}|" "$env_file"
+        sed -i -E "s|^(TINYBIRD_TOKEN=).*|\1${new_token}|" "$env_file"
+    fi
+}
+
+# ---- Prompt for update (interactive) or print manual instructions ----
+prompt_update() {
+    local env_file="$1"
+    local new_token="$2"
+
+    if [ -t 0 ]; then
+        echo ""
+        echo -e "${YELLOW}The Tinybird admin token in $env_file differs from the running container.${NC}"
+        echo -e "${YELLOW}Using the outdated token will cause authentication failures.${NC}"
+        echo ""
+        read -r -p "Update $env_file with the new token? [Y/n] " response
+        response=${response:-Y}
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            update_env_token "$env_file" "$new_token"
+            log_ok "Updated TINY_BIRD_API_KEY and TINYBIRD_TOKEN in $env_file."
+            ENV_WAS_UPDATED=1
+        else
+            log_warn "Skipping update. You will need to manually update $env_file before services can connect."
+            ENV_WAS_UPDATED=0
+        fi
+    else
+        log_warn "Non-interactive terminal — cannot prompt for update."
+        log_warn "To update $env_file manually:"
+        echo ""
+        echo -e "  ${YELLOW}sed -i 's|^TINY_BIRD_API_KEY=.*|TINY_BIRD_API_KEY=$new_token|' $env_file${NC}"
+        echo -e "  ${YELLOW}sed -i 's|^TINYBIRD_TOKEN=.*|TINYBIRD_TOKEN=$new_token|' $env_file${NC}"
+        echo ""
+        ENV_WAS_UPDATED=0
+    fi
+}
+
+# ---- Compare extracted token with .env.docker ----
+compare_and_prompt() {
+    local extracted_token="$1"
+    local env_file="$2"
+    local env_token
+
+    env_token=$(read_env_token "$env_file")
+
+    if [ -z "$env_token" ]; then
+        log_warn "No TINY_BIRD_API_KEY found in $env_file."
+        prompt_update "$env_file" "$extracted_token"
+        return
+    fi
+
+    if [ "$env_token" = "$extracted_token" ]; then
+        log_ok "TINY_BIRD_API_KEY in $env_file matches the running container. Up to date."
+        ENV_WAS_UPDATED=0
+        return
+    fi
+
+    log_warn "TINY_BIRD_API_KEY in $env_file is outdated!"
+    log_warn "  .env.docker token:  ${env_token:0:20}..."
+    log_warn "  Container token:    ${extracted_token:0:20}..."
+    prompt_update "$env_file" "$extracted_token"
+}
+
 # ---- Print summary ----
 print_summary() {
     local token="$1"
@@ -245,8 +328,15 @@ print_summary() {
     echo -e "  ${CYAN}Admin token:${NC}"
     echo -e "  ${YELLOW}$token${NC}"
     echo ""
-    echo -e "  ${CYAN}Add to .env.docker:${NC}"
-    echo -e "  TINY_BIRD_API_KEY=${YELLOW}$token${NC}"
+
+    if [ "${ENV_WAS_UPDATED:-0}" -eq 1 ]; then
+        echo -e "  ${GREEN}✓ .env.docker already updated with this token.${NC}"
+    else
+        echo -e "  ${CYAN}Add to .env.docker:${NC}"
+        echo -e "  TINY_BIRD_API_KEY=${YELLOW}$token${NC}"
+        echo -e "  TINYBIRD_TOKEN=${YELLOW}$token${NC}"
+    fi
+
     echo -e "  TINYBIRD_URL=${YELLOW}$TB_URL${NC}"
     echo ""
     echo -e "  ${CYAN}If using Coolify's docker-compose (service name: tinybird):${NC}"
@@ -290,6 +380,8 @@ main() {
     fi
 
     log_ok "Admin token: ${ADMIN_TOKEN:0:20}..."
+
+    compare_and_prompt "$ADMIN_TOKEN" "$ENV_FILE"
 
     deploy_project "$ADMIN_TOKEN"
     verify_deployment "$ADMIN_TOKEN"

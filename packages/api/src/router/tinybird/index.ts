@@ -163,7 +163,12 @@ export function getMetricsRegionsProcedure(period: Period, type: Type) {
   }
 }
 
-export function getStatusProcedure(_period: "45d", type: Type) {
+export function getStatusProcedure(_period: "45d" | "90d", type: Type) {
+  if (_period === "90d") {
+    if (type === "dns") return tb.dnsStatus90d;
+    if (type === "http") return tb.httpStatus90d;
+    if (type === "tcp") return tb.tcpStatus90d;
+  }
   if (type === "dns") return tb.dnsStatus45d;
   if (type === "http") return tb.httpStatus45d;
   if (type === "tcp") return tb.tcpStatus45d;

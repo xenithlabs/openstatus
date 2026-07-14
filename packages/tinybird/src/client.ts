@@ -525,6 +525,27 @@ export class OSTinybird {
     });
   }
 
+  public get httpStatus90d() {
+    return this.tb.buildPipe({
+      pipe: "endpoint__http_status_90d__v1",
+      parameters: z.object({
+        monitorIds: z.string().array(),
+      }),
+      data: z.object({
+        day: z.string().transform((val) => {
+          // That's a hack because clickhouse return the date in UTC but in shitty format (2021-09-01 00:00:00)
+          return new Date(`${val} GMT`).toISOString();
+        }),
+        count: z.number().prefault(0),
+        ok: z.number().prefault(0),
+        degraded: z.number().prefault(0),
+        error: z.number().prefault(0),
+        monitorId: z.string(),
+      }),
+      opts: { next: { revalidate: REVALIDATE } },
+    });
+  }
+
   public get httpGetBiweekly() {
     return this.tb.buildPipe({
       pipe: "endpoint__http_get_14d__v0",
@@ -1065,6 +1086,27 @@ export class OSTinybird {
       parameters: z.object({
         monitorIds: z.string().array(),
         days: z.int().max(45).optional(),
+      }),
+      data: z.object({
+        day: z.string().transform((val) => {
+          // That's a hack because clickhouse return the date in UTC but in shitty format (2021-09-01 00:00:00)
+          return new Date(`${val} GMT`).toISOString();
+        }),
+        count: z.number().prefault(0),
+        ok: z.number().prefault(0),
+        degraded: z.number().prefault(0),
+        error: z.number().prefault(0),
+        monitorId: z.coerce.string(),
+      }),
+      opts: { next: { revalidate: REVALIDATE } },
+    });
+  }
+
+  public get tcpStatus90d() {
+    return this.tb.buildPipe({
+      pipe: "endpoint__tcp_status_90d__v1",
+      parameters: z.object({
+        monitorIds: z.string().array(),
       }),
       data: z.object({
         day: z.string().transform((val) => {
@@ -2296,6 +2338,27 @@ export class OSTinybird {
   public get dnsStatus45d() {
     return this.tb.buildPipe({
       pipe: "endpoint__dns_status_45d__v0",
+      parameters: z.object({
+        monitorIds: z.string().array(),
+      }),
+      data: z.object({
+        day: z.string().transform((val) => {
+          // That's a hack because clickhouse return the date in UTC but in shitty format (2021-09-01 00:00:00)
+          return new Date(`${val} GMT`).toISOString();
+        }),
+        count: z.number().prefault(0),
+        ok: z.number().prefault(0),
+        degraded: z.number().prefault(0),
+        error: z.number().prefault(0),
+        monitorId: z.coerce.string(),
+      }),
+      opts: { next: { revalidate: REVALIDATE } },
+    });
+  }
+
+  public get dnsStatus90d() {
+    return this.tb.buildPipe({
+      pipe: "endpoint__dns_status_90d__v1",
       parameters: z.object({
         monitorIds: z.string().array(),
       }),

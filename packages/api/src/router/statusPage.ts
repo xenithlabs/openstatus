@@ -598,7 +598,7 @@ export const statusPageRouter = createTRPCRouter({
           .prefault("dominant"),
         // preview override for the floating-button config; falls back to the
         // page's stored `configuration.days` when omitted
-        days: z.union([z.literal(30), z.literal(45)]).optional(),
+        days: z.union([z.literal(30), z.literal(45), z.literal(90)]).optional(),
       }),
     )
     .query(async (opts) => {
@@ -654,10 +654,19 @@ export const statusPageRouter = createTRPCRouter({
         dns: monitors.filter((c) => c.monitor.jobType === "dns"),
       };
 
+      const parsedConfiguration = pageConfigurationSchema.safeParse(
+        _page.configuration ?? {},
+      );
+      const lookbackPeriod =
+        input.days ??
+        (parsedConfiguration.success ? parsedConfiguration.data.days : 45);
+      const statusPeriod: "45d" | "90d" =
+        lookbackPeriod > 45 ? "90d" : "45d";
+
       const proceduresByType = {
-        http: getStatusProcedure("45d", "http"),
-        tcp: getStatusProcedure("45d", "tcp"),
-        dns: getStatusProcedure("45d", "dns"),
+        http: getStatusProcedure(statusPeriod, "http"),
+        tcp: getStatusProcedure(statusPeriod, "tcp"),
+        dns: getStatusProcedure(statusPeriod, "dns"),
       };
 
       const [statusHttp, statusTcp, statusDns] = await Promise.all(
@@ -690,13 +699,6 @@ export const statusPageRouter = createTRPCRouter({
           });
         }
       }
-
-      const parsedConfiguration = pageConfigurationSchema.safeParse(
-        _page.configuration ?? {},
-      );
-      const lookbackPeriod =
-        input.days ??
-        (parsedConfiguration.success ? parsedConfiguration.data.days : 45);
 
       return pageComponents.map((c) => {
         const events = getEvents({

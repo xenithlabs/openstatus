@@ -51,7 +51,7 @@ export type BarType = (typeof BAR_TYPE)[number];
 export const COMMUNITY_THEME = THEME_KEYS;
 export type CommunityTheme = (typeof COMMUNITY_THEME)[number];
 
-export const NUMBER_OF_DAYS = [30, 45] as const;
+export const NUMBER_OF_DAYS = [30, 45, 90] as const;
 export type NumberOfDays = (typeof NUMBER_OF_DAYS)[number];
 
 interface StatusPageContextType {

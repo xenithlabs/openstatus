@@ -61,8 +61,8 @@ const configurationSchema = z
     uptime: z.boolean().or(z.literal("true").or(z.literal("false"))),
     theme: z.enum(THEME_KEYS as [string, ...string[]]),
     days: z
-      .union([z.literal(30), z.literal(45)])
-      .or(z.literal("30").or(z.literal("45")))
+      .union([z.literal(30), z.literal(45), z.literal(90)])
+      .or(z.literal("30").or(z.literal("45")).or(z.literal("90")))
       .nullish(),
   })
   .refine(
@@ -307,7 +307,7 @@ export function FormConfiguration({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {["30", "45"].map((days) => (
+                        {["30", "45", "90"].map((days) => (
                           <SelectItem key={days} value={days}>
                             {days} days
                           </SelectItem>
@@ -413,7 +413,7 @@ const searchParams = {
   value: parseAsStringLiteral(["duration", "requests", "manual"]),
   uptime: parseAsStringLiteral(["true", "false"]),
   theme: parseAsStringLiteral(Object.keys(THEMES)),
-  days: parseAsStringLiteral(["30", "45"]),
+  days: parseAsStringLiteral(["30", "45", "90"]),
 };
 
 function FormConfigurationDialog({

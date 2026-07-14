@@ -8,9 +8,9 @@ import type { StatusData } from "../status-timeline";
 type SupportedJobType = "http" | "tcp" | "dns";
 
 /**
- * Raw daily status buckets (one row per monitor per day) from the 45d Tinybird
- * pipes, grouped by jobType. Ids that are missing / soft-deleted / of an
- * unsupported jobType are skipped — callers want empty data for those, not a
+ * Raw daily status buckets (one row per monitor per day) from the 45d or 90d
+ * Tinybird pipes, grouped by jobType. Ids that are missing / soft-deleted / of
+ * an unsupported jobType are skipped — callers want empty data for those, not a
  * throw. The pipe rows already match `StatusData` (day ISO, monitorId string).
  */
 export async function fetchMonitorDailyStats(args: {
@@ -18,6 +18,7 @@ export async function fetchMonitorDailyStats(args: {
   tb: OSTinybird;
   monitorIds: number[];
   workspaceId: number;
+  days?: number;
 }): Promise<StatusData[]> {
   const ids = Array.from(new Set(args.monitorIds));
   if (ids.length === 0) return [];
@@ -54,12 +55,19 @@ export async function fetchMonitorDailyStats(args: {
       .filter((jobType) => idsByJobType[jobType].length > 0)
       .map((jobType) => {
         const monitorIds = idsByJobType[jobType];
+        const use90d = (args.days ?? 45) > 45;
         const pipe =
           jobType === "http"
-            ? args.tb.httpStatus45d
+            ? use90d
+              ? args.tb.httpStatus90d
+              : args.tb.httpStatus45d
             : jobType === "tcp"
-              ? args.tb.tcpStatus45d
-              : args.tb.dnsStatus45d;
+              ? use90d
+                ? args.tb.tcpStatus90d
+                : args.tb.tcpStatus45d
+              : use90d
+                ? args.tb.dnsStatus90d
+                : args.tb.dnsStatus45d;
         return pipe({ monitorIds });
       }),
   );

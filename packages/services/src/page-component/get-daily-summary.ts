@@ -95,6 +95,7 @@ export async function getPageComponentDailySummary(args: {
       tb,
       monitorIds,
       workspaceId: input.workspaceId,
+      days,
     }),
     db.query.maintenance.findMany({
       where: (m, { eq }) => eq(m.pageId, input.pageId),
