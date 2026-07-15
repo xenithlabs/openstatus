@@ -1,0 +1,16 @@
+{
+  "extends": "@openstatus/tsconfig/base.json",
+  "include": ["src", "*.ts"],
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "hono/jsx",
+    "module": "ESNext",
+    "target": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["bun-types"],
+    "skipLibCheck": true,
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  }
+}

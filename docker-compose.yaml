@@ -580,3 +580,96 @@ services:
             retries: 3
             start_period: 45s
         restart: unless-stopped
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Comparison profile — head-to-head status page testing
+    # Run: docker compose --profile comparison up --abort-on-container-exit
+    # ═══════════════════════════════════════════════════════════════════════
+
+    status-page-htmx:
+        container_name: openstatus-status-page-htmx
+        build:
+            context: .
+            dockerfile: apps/status-page-htmx/Dockerfile
+            target: runtime
+        image: openstatus/status-page-htmx:latest
+        profiles: ["comparison"]
+        networks:
+            - openstatus
+        ports:
+            - "127.0.0.1:3004:3000"
+        labels:
+            - traefik.enable=true
+            - traefik.http.routers.status-page-htmx.rule=Host(`status-htmx.openstat.us`)
+            - traefik.http.routers.status-page-htmx.entrypoints=web,websecure
+            - traefik.http.routers.status-page-htmx.tls=true
+            - traefik.http.services.status-page-htmx.loadbalancer.server.port=3000
+        env_file:
+            - .env.docker
+        environment:
+            - PORT=3000
+            - TRPC_URL=http://status-page:3000/api/trpc
+            - NODE_ENV=production
+            - SELF_HOST=true
+            - LOG_LEVEL=debug
+        depends_on:
+            db-migrate:
+                condition: service_completed_successfully
+            status-page:
+                condition: service_healthy
+            libsql:
+                condition: service_healthy
+        healthcheck:
+            test: ["CMD-SHELL", "curl -f http://localhost:3000/ping || exit 1"]
+            interval: 10s
+            timeout: 5s
+            retries: 3
+            start_period: 10s
+        restart: unless-stopped
+
+    status-page-compare:
+        container_name: openstatus-status-page-compare
+        build:
+            context: .
+            dockerfile: scripts/Dockerfile.compare
+        image: openstatus/status-page-compare:latest
+        profiles: ["comparison"]
+        networks:
+            - openstatus
+        env_file:
+            - .env.docker
+        environment:
+            - NEXTJS_BASE=http://status-page:3000
+            - HTMX_BASE=http://status-page-htmx:3000
+            - TEST_SLUG=status
+        depends_on:
+            status-page:
+                condition: service_healthy
+            status-page-htmx:
+                condition: service_healthy
+        command: ["sh", "-c", "bun install && bun test test/comparison"]
+        restart: "no"
+
+    # ── Test profile: standalone test runner ────────────────────────────
+    status-page-htmx-test:
+        container_name: openstatus-status-page-htmx-test
+        build:
+            context: .
+            dockerfile: apps/status-page-htmx/Dockerfile
+            target: test
+        image: openstatus/status-page-htmx-test:latest
+        profiles: ["test"]
+        networks:
+            - openstatus
+        env_file:
+            - .env.docker
+        environment:
+            - TRPC_URL=http://status-page:3000/api/trpc
+            - NODE_ENV=test
+            - SELF_HOST=true
+            - PAGE_SLUG=status
+        depends_on:
+            status-page:
+                condition: service_healthy
+        command: ["bun", "test", "--ignore", "test/comparison/home-comparison"]
+        restart: "no"

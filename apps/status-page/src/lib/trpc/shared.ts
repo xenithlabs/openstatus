@@ -57,7 +57,7 @@ const getBaseUrl = () => {
 const lambdas = ["stripeRouter", "emailRouter"];
 
 export const endingLink = (opts?: {
-  fetch?: typeof fetch;
+  fetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
   headers?: HTTPHeaders | (() => HTTPHeaders | Promise<HTTPHeaders>);
 }) =>
   ((runtime) => {

@@ -51,7 +51,7 @@ const lambdas = [
 ];
 
 export const endingLink = (opts?: {
-  fetch?: typeof fetch;
+  fetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
   headers?: HTTPHeaders | (() => HTTPHeaders | Promise<HTTPHeaders>);
 }) =>
   ((runtime) => {

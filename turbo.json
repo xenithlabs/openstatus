@@ -49,6 +49,13 @@
     "@openstatus/dashboard#dev": {
       "cache": false
     },
+    "@openstatus/status-page-htmx#dev": {
+      "cache": false
+    },
+    "@openstatus/status-page-htmx#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["static/styles.css", "dist/**"]
+    },
     "test": {
       "cache": false
     },

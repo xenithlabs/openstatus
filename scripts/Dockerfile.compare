@@ -1,0 +1,16 @@
+# syntax=docker/dockerfile:1.7-labs
+# ── Comparison test runner Dockerfile ────────────────────────────────────
+# Simple Bun script that runs HTTP tests against running status-page and
+# status-page-htmx services. No app source imports needed — just fetch().
+#
+# Built and executed via: docker compose --profile comparison up
+
+FROM oven/bun:1.3.11 AS runner
+WORKDIR /app
+COPY \
+  --link \
+  "apps/status-page-htmx/test/comparison/" "/app/test/comparison/"
+COPY \
+  --link \
+  "apps/status-page-htmx/test/helpers.ts" "/app/test/helpers.ts"
+CMD ["bun", "test", "test/comparison"]

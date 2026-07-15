@@ -211,6 +211,7 @@
     "dev:web": "turbo run dev --filter='./apps/web' --filter='./packages/db'",
     "dev:status-page": "turbo run dev --filter='./apps/status-page' --filter='./packages/db'",
     "dev:dashboard": "turbo run dev --filter='./apps/dashboard' --filter='./packages/db'",
+    "dev:status-page-htmx": "cd apps/status-page-htmx && bun run dev",
     "dx": "turbo run dx",
     "tsc": "tsc",
     "test": "turbo run test"

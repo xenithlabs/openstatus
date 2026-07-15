@@ -1,0 +1,30 @@
+{
+  "name": "@openstatus/status-page-htmx",
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --hot src/index.tsx",
+    "start": "NODE_ENV=production bun run src/index.tsx",
+    "build:css": "bun x @tailwindcss/cli -i src/styles/input.css -o static/styles.css --minify",
+    "build": "bun run build:css",
+    "test": "bun test",
+    "tsc": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@openstatus/api": "workspace:*",
+    "@openstatus/theme-store": "workspace:*",
+    "@trpc/client": "catalog:",
+    "date-fns": "catalog:",
+    "hono": "catalog:",
+    "superjson": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@openstatus/tsconfig": "workspace:*",
+    "@tailwindcss/cli": "catalog:",
+    "@types/node": "catalog:",
+    "bun-types": "catalog:",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:"
+  }
+}
