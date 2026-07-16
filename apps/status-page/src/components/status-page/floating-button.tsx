@@ -65,6 +65,8 @@ interface StatusPageContextType {
   setNumberOfDays: (numberOfDays: NumberOfDays) => void;
   communityTheme: CommunityTheme;
   setCommunityTheme: (communityTheme: CommunityTheme) => void;
+  componentLayout: "openai" | "default";
+  setComponentLayout: (layout: "openai" | "default") => void;
 }
 
 const StatusPageContext = createContext<StatusPageContextType | null>(null);
@@ -84,6 +86,7 @@ export function StatusPageProvider({
   defaultShowUptime = true,
   defaultNumberOfDays = 45,
   defaultCommunityTheme = "default",
+  defaultComponentLayout = "default" as "openai" | "default",
 }: {
   children: React.ReactNode;
   defaultCardType?: CardType;
@@ -91,6 +94,7 @@ export function StatusPageProvider({
   defaultShowUptime?: boolean;
   defaultNumberOfDays?: NumberOfDays;
   defaultCommunityTheme?: CommunityTheme;
+  defaultComponentLayout?: "openai" | "default";
 }) {
   const [cardType, setCardType] = useState<CardType>(defaultCardType);
   const [barType, setBarType] = useState<BarType>(defaultBarType);
@@ -99,6 +103,9 @@ export function StatusPageProvider({
     useState<NumberOfDays>(defaultNumberOfDays);
   const [communityTheme, setCommunityTheme] = useState<CommunityTheme>(
     defaultCommunityTheme,
+  );
+  const [componentLayout, setComponentLayout] = useState<"openai" | "default">(
+    defaultComponentLayout,
   );
   const [isMounted, setIsMounted] = useState(false);
 
@@ -125,6 +132,8 @@ export function StatusPageProvider({
         setNumberOfDays,
         communityTheme,
         setCommunityTheme,
+        componentLayout,
+        setComponentLayout,
       }}
     >
       {children}

@@ -1,6 +1,8 @@
 import type { FC } from "hono/jsx";
 
 import { formatDate } from "../lib/date";
+import { CopyLink } from "./copy-link";
+import { Markdown } from "./markdown";
 
 export interface ReportUpdate {
   id: number;
@@ -76,7 +78,8 @@ function statusLabel(status: string): string {
 export const ReportDetailView: FC<{
   report: ReportDetail;
   prefix: string;
-}> = ({ report, prefix }) => {
+  url: string;
+}> = ({ report, prefix, url }) => {
   const updates = [...report.statusReportUpdates].sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
   );
@@ -88,7 +91,7 @@ export const ReportDetailView: FC<{
 
   return (
     <div class="flex flex-col gap-6">
-      {/* Back button */}
+      {/* Back button + Copy link */}
       <div class="flex w-full flex-row items-center justify-between gap-2 py-0.5">
         <a
           href={`${prefix}/events`}
@@ -107,6 +110,7 @@ export const ReportDetailView: FC<{
           </svg>
           Back
         </a>
+        <CopyLink url={url} />
       </div>
 
       {/* Report card */}
@@ -150,7 +154,7 @@ export const ReportDetailView: FC<{
 
           {/* Timeline */}
           <div class="relative pl-6 border-l-2 border-border space-y-4">
-            {updates.map((update, i) => (
+            {updates.map((update) => (
               <div class="relative">
                 {/* Dot */}
                 <div
@@ -165,9 +169,9 @@ export const ReportDetailView: FC<{
                 </div>
                 {/* Message */}
                 {update.message ? (
-                  <p class="text-sm text-muted-foreground whitespace-pre-wrap">
-                    {update.message}
-                  </p>
+                  <div class="text-sm text-muted-foreground">
+                    <Markdown content={update.message} />
+                  </div>
                 ) : null}
               </div>
             ))}
@@ -184,10 +188,11 @@ export const ReportDetailView: FC<{
 export const MaintenanceDetailView: FC<{
   maintenance: MaintenanceDetail;
   prefix: string;
-}> = ({ maintenance, prefix }) => {
+  url: string;
+}> = ({ maintenance, prefix, url }) => {
   return (
     <div class="flex flex-col gap-6">
-      {/* Back button */}
+      {/* Back button + Copy link */}
       <div class="flex w-full flex-row items-center justify-between gap-2 py-0.5">
         <a
           href={`${prefix}/events`}
@@ -206,6 +211,7 @@ export const MaintenanceDetailView: FC<{
           </svg>
           Back
         </a>
+        <CopyLink url={url} />
       </div>
 
       {/* Maintenance card */}
@@ -239,8 +245,8 @@ export const MaintenanceDetailView: FC<{
 
           {/* Message */}
           {maintenance.message ? (
-            <div class="text-sm text-muted-foreground whitespace-pre-wrap mt-4 border-t border-border pt-4">
-              {maintenance.message}
+            <div class="text-sm text-muted-foreground mt-4 border-t border-border pt-4">
+              <Markdown content={maintenance.message} />
             </div>
           ) : null}
 

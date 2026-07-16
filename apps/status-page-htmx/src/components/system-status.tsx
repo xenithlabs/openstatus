@@ -1,15 +1,23 @@
 import type { FC } from "hono/jsx";
 
-import type { StatusBarData } from "./bar-chart";
-import { BarChart } from "./bar-chart";
+import type { StatusBarData, DayEvent } from "./status-bar";
+import { StatusBar } from "./status-bar";
 import { ComponentRow } from "./component-row";
 import { ChevronDown, StatusDot } from "./icons";
+
+/** Format uptime string to 3 decimal places (e.g. "99.66%" → "99.660") */
+function formatUptime(raw: string): string {
+  const num = parseFloat(raw.replace("%", ""));
+  if (isNaN(num)) return raw;
+  return num.toFixed(3);
+}
 
 export interface TrackerComponent {
   id: number;
   name: string;
   description?: string | null;
   status: "success" | "degraded" | "error" | "info";
+  monitor?: { name: string } | null;
 }
 
 export interface GroupTracker {
@@ -46,6 +54,8 @@ export interface SystemStatusProps {
   groupUptime: GroupUptime[];
   isLoading: boolean;
   showUptime: boolean;
+  barEvents?: Record<number, DayEvent[]>;
+  prefix?: string;
 }
 
 /**
@@ -58,6 +68,8 @@ export const SystemStatus: FC<SystemStatusProps> = ({
   groupUptime,
   isLoading,
   showUptime,
+  barEvents,
+  prefix,
 }) => {
   if (trackers.length === 0) return null;
 
@@ -84,6 +96,8 @@ export const SystemStatus: FC<SystemStatusProps> = ({
                   )}
                   isLoading={isLoading}
                   showUptime={showUptime}
+                  barEvents={barEvents}
+                  prefix={prefix}
                 />
               );
             }
@@ -101,7 +115,7 @@ export const SystemStatus: FC<SystemStatusProps> = ({
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-2">
                     <StatusDot status={comp.status} />
-                    <span class="text-sm">{comp.name}</span>
+                    <span class="text-sm">{comp.monitor?.name || comp.name}</span>
                     {comp.description ? (
                       <span class="text-xs text-muted-foreground hidden sm:inline">
                         {comp.description}
@@ -115,7 +129,7 @@ export const SystemStatus: FC<SystemStatusProps> = ({
                       ) : (
                         <span class="text-muted-foreground font-mono text-xs">
                           {uptime?.uptime != null
-                            ? `${uptime.uptime}%`
+                            ? `${formatUptime(uptime.uptime)}%`
                             : null}
                         </span>
                       )
@@ -124,7 +138,7 @@ export const SystemStatus: FC<SystemStatusProps> = ({
                 </div>
                 <div class="hidden md:flex mt-1">
                   {isLoading ? null : uptime?.data && uptime.data.length > 0 ? (
-                    <BarChart data={uptime.data} />
+                    <StatusBar data={uptime.data} events={barEvents} prefix={prefix} />
                   ) : null}
                 </div>
               </div>
@@ -145,7 +159,9 @@ const SystemStatusGroup: FC<{
   groupUptime?: GroupUptime;
   isLoading: boolean;
   showUptime: boolean;
-}> = ({ tracker, componentUptime, groupUptime, isLoading, showUptime }) => {
+  barEvents?: Record<number, DayEvent[]>;
+  prefix?: string;
+}> = ({ tracker, componentUptime, groupUptime, isLoading, showUptime, barEvents, prefix }) => {
   const groupId = `group-${tracker.groupId}`;
   const componentCount = tracker.components.length;
 
@@ -183,7 +199,7 @@ const SystemStatusGroup: FC<{
                 <span class="whitespace-nowrap text-xs">--% uptime</span>
               ) : groupUptime?.uptime != null ? (
                 <span class="whitespace-nowrap text-xs">
-                  {groupUptime.uptime}% uptime
+                  {formatUptime(groupUptime.uptime)}% uptime
                 </span>
               ) : null}
             </div>
@@ -207,14 +223,13 @@ const SystemStatusGroup: FC<{
       {/* Bar chart for the group */}
       <div class="hidden md:flex mt-1">
         {isLoading ? null : groupUptime?.data && groupUptime.data.length > 0 ? (
-          <BarChart data={groupUptime.data} />
+          <StatusBar data={groupUptime.data} events={barEvents} prefix={prefix} />
         ) : null}
       </div>
 
       {/* Expandable sub-components */}
       <div
         x-show="open"
-        x-collapse
         class="mt-2 pl-6 border-l border-border/50 space-y-1"
         style="display: none"
       >
@@ -225,13 +240,15 @@ const SystemStatusGroup: FC<{
           return (
             <ComponentRow
               key={`sub-${component.id}`}
-              name={component.name}
+              name={component.monitor?.name || component.name}
               description={component.description}
               status={component.status}
+              data={uptime?.data}
               uptime={uptime?.uptime}
               isLoading={isLoading}
               showUptime={showUptime}
-              compact
+              barEvents={barEvents}
+              prefix={prefix}
             />
           );
         })}

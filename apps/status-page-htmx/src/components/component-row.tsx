@@ -1,8 +1,15 @@
 import type { FC } from "hono/jsx";
 
-import type { StatusBarData } from "./bar-chart";
-import { BarChart } from "./bar-chart";
+import type { StatusBarData, DayEvent } from "./status-bar";
+import { StatusBar } from "./status-bar";
 import { StatusDot } from "./icons";
+
+/** Format uptime string to 3 decimal places (e.g. "99.66%" → "99.660") */
+function formatUptime(raw: string): string {
+  const num = parseFloat(raw.replace("%", ""));
+  if (isNaN(num)) return raw;
+  return num.toFixed(3);
+}
 
 export interface ComponentRowProps {
   name: string;
@@ -14,6 +21,8 @@ export interface ComponentRowProps {
   showUptime?: boolean;
   /** Render as a simple text row (no bar chart, no uptime pill) */
   compact?: boolean;
+  barEvents?: Record<number, DayEvent[]>;
+  prefix?: string;
 }
 
 /**
@@ -29,35 +38,37 @@ export const ComponentRow: FC<ComponentRowProps> = ({
   isLoading,
   showUptime,
   compact,
+  barEvents,
+  prefix,
 }) => {
   return (
-    <div class="flex items-center justify-between py-1.5">
-      <div class="flex items-center gap-2">
-        <StatusDot status={status} />
-        <span class="text-sm">{name}</span>
-        {description ? (
-          <span class="text-xs text-muted-foreground hidden sm:inline">
-            {description}
-          </span>
-        ) : null}
-      </div>
-      {compact ? (
-        showUptime && uptime != null ? (
-          <span class="text-muted-foreground font-mono text-xs">{uptime}%</span>
-        ) : null
-      ) : (
+    <div>
+      <div class="flex items-center justify-between py-1.5">
         <div class="flex items-center gap-2">
-          {showUptime ? (
-            isLoading ? (
-              <div class="h-3 w-12 animate-pulse rounded bg-muted" />
-            ) : (
-              <span class="text-muted-foreground font-mono text-xs whitespace-nowrap">
-                {uptime != null ? `${uptime}% uptime` : null}
-              </span>
-            )
+          <StatusDot status={status} />
+          <span class="text-sm">{name}</span>
+          {description ? (
+            <span class="text-xs text-muted-foreground hidden sm:inline">
+              {description}
+            </span>
           ) : null}
         </div>
-      )}
+        {showUptime ? (
+          isLoading ? (
+            <div class="h-3 w-12 animate-pulse rounded bg-muted" />
+          ) : (
+            <span class="text-muted-foreground font-mono text-xs whitespace-nowrap">
+              {uptime != null ? `${formatUptime(uptime)}% uptime` : null}
+            </span>
+          )
+        ) : null}
+      </div>
+      {/* Status bar for this component */}
+      {!compact && !isLoading && data && data.length > 0 ? (
+        <div class="hidden md:flex mt-0.5 mb-1">
+          <StatusBar data={data} events={barEvents} prefix={prefix} />
+        </div>
+      ) : null}
     </div>
   );
 };

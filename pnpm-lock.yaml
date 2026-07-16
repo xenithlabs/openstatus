@@ -72,6 +72,9 @@ catalogs:
     '@hono/sentry':
       specifier: 1.2.2
       version: 1.2.2
+    '@hono/trpc-server':
+      specifier: 0.4.2
+      version: 0.4.2
     '@hono/zod-openapi':
       specifier: 1.4.0
       version: 1.4.0
@@ -1287,6 +1290,9 @@ importers:
 
   apps/status-page-htmx:
     dependencies:
+      '@hono/trpc-server':
+        specifier: 'catalog:'
+        version: 0.4.2(@trpc/server@11.17.0(typescript@5.9.3))(hono@4.12.21)
       '@openstatus/api':
         specifier: workspace:*
         version: link:../../packages/api
@@ -1296,12 +1302,18 @@ importers:
       '@trpc/client':
         specifier: 'catalog:'
         version: 11.17.0(@trpc/server@11.17.0(typescript@5.9.3))(typescript@5.9.3)
+      '@trpc/server':
+        specifier: 'catalog:'
+        version: 11.17.0(typescript@5.9.3)
       date-fns:
         specifier: 'catalog:'
         version: 3.6.0
       hono:
         specifier: 'catalog:'
         version: 4.12.21
+      marked:
+        specifier: ^18.0.6
+        version: 18.0.6
       superjson:
         specifier: 'catalog:'
         version: 2.2.6
@@ -4103,6 +4115,13 @@ packages:
     resolution: {integrity: sha512-027grZBrRGDPor8mRd+QOBcSpUlF07YrTp/WFDXZhbvWZ+1LrZdERUqcdg1gBGDUTanHhd9ucblpNNN6+V1bxg==}
     peerDependencies:
       hono: '>=3.*'
+
+  '@hono/trpc-server@0.4.2':
+    resolution: {integrity: sha512-3TDrc42CZLgcTFkXQba+y7JlRWRiyw1AqhLqztWyNS2IFT+3bHld0lxKdGBttCtGKHYx0505dM67RMazjhdZqw==}
+    engines: {node: '>=16.0.0'}
+    peerDependencies:
+      '@trpc/server': ^10.10.0 || >11.0.0-rc
+      hono: '>=4.0.0'
 
   '@hono/zod-openapi@1.4.0':
     resolution: {integrity: sha512-AFchqR1N/NxfI4hUOSGI2/g8zLROxA1OE7Oh5JJFlTaGxhrdRyH+93gd0tIBpb0z8s9r8hUoNnaOBfHbdb4NMw==}
@@ -9210,6 +9229,11 @@ packages:
     engines: {node: '>= 18'}
     hasBin: true
 
+  marked@18.0.6:
+    resolution: {integrity: sha512-MrV5puXBfuiy6wl6DLaq3BtIJQAJToAd5zt/ZKhRfGRAuFPALE7/4Y7jnxRQoEgK/pBgurGqLyAuRgZ2xOjr6w==}
+    engines: {node: '>= 20'}
+    hasBin: true
+
   math-intrinsics@1.1.0:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
     engines: {node: '>= 0.4'}
@@ -12525,6 +12549,11 @@ snapshots:
       hono: 4.12.21
       toucan-js: 4.1.1
 
+  '@hono/trpc-server@0.4.2(@trpc/server@11.17.0(typescript@5.9.3))(hono@4.12.21)':
+    dependencies:
+      '@trpc/server': 11.17.0(typescript@5.9.3)
+      hono: 4.12.21
+
   '@hono/zod-openapi@1.4.0(hono@4.12.21)(zod@4.1.13)':
     dependencies:
       '@asteasolutions/zod-to-openapi': 8.5.0(zod@4.1.13)
@@ -13010,7 +13039,7 @@ snapshots:
   '@opentelemetry/core@2.7.1(@opentelemetry/api@1.9.1)':
     dependencies:
       '@opentelemetry/api': 1.9.1
-      '@opentelemetry/semantic-conventions': 1.38.0
+      '@opentelemetry/semantic-conventions': 1.41.1
 
   '@opentelemetry/exporter-logs-otlp-grpc@0.208.0(@opentelemetry/api@1.9.1)':
     dependencies:
@@ -13286,7 +13315,7 @@ snapshots:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/core': 2.7.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/resources': 2.7.1(@opentelemetry/api@1.9.1)
-      '@opentelemetry/semantic-conventions': 1.38.0
+      '@opentelemetry/semantic-conventions': 1.41.1
 
   '@opentelemetry/semantic-conventions@1.38.0': {}
 
@@ -17565,6 +17594,8 @@ snapshots:
   markdown-table@3.0.4: {}
 
   marked@15.0.12: {}
+
+  marked@18.0.6: {}
 
   math-intrinsics@1.1.0: {}
 

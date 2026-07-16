@@ -1,1 +1,30 @@
 @import "tailwindcss";
+
+/* Register custom theme colors so Tailwind v4 generates bg-*, text-*, border-*,
+   ring-*, placeholder:text-*, etc. utilities that reference the CSS variables
+   defined at runtime in the page's inline <style id="theme-styles">.
+   Without this @theme block, bg-background would resolve to
+   var(--color-background) which doesn't exist → transparent. */
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-success: var(--success);
+  --color-destructive: var(--destructive);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+}

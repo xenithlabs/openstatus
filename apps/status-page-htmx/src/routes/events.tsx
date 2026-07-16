@@ -1,7 +1,7 @@
 import type { Context } from "hono";
-import type { FC } from "hono/jsx";
 
 import { Header } from "../components/header";
+import { CollapsibleIncidentCard } from "../components/incident-card";
 import {
   MaintenanceDetailView,
   ReportDetailView,
@@ -9,7 +9,6 @@ import {
 import { Layout } from "../components/layout";
 import {
   capitalize,
-  formatDate,
   MONTH_NAMES,
   parseYearMonthSlug,
   toYearMonthSlug,
@@ -44,7 +43,7 @@ function getReportDate(report: Record<string, unknown>): Date {
 
 // ── Shared page fetch ───────────────────────────────────────────────────────
 
-async function fetchPage(c: Context, slug: string) {
+async function fetchPage(_c: Context, slug: string) {
   let page;
   try {
     page = await trpc.statusPage.get.query({ slug });
@@ -56,7 +55,7 @@ async function fetchPage(c: Context, slug: string) {
   return page ?? null;
 }
 
-function pageShell(page: Record<string, unknown>, prefix: string, children: JSX.Element): JSX.Element {
+function pageShell(page: Record<string, unknown>, prefix: string, slug: string, children: any): any {
   return (
     <Layout
       page={{
@@ -69,6 +68,7 @@ function pageShell(page: Record<string, unknown>, prefix: string, children: JSX.
         title={page.title as string}
         icon={page.icon as string | null}
         prefix={prefix}
+        slug={slug}
       />
       {children}
     </Layout>
@@ -157,10 +157,10 @@ export async function eventsListHandler(c: Context): Promise<Response> {
   }
 
   return c.html(
-    pageShell(page as Record<string, unknown>, prefix,
+    pageShell(page as Record<string, unknown>, prefix, slug,
       <div
         class="flex flex-col gap-6"
-        x-data={`{ activeYear: '${defaultYear}' }`}
+        x-data={`{ activeYear: '${defaultYear}', init() { const params = new URLSearchParams(window.location.search); const urlYear = params.get('year'); if (urlYear) this.activeYear = urlYear; }, setYear(y) { this.activeYear = String(y); const url = new URL(window.location); url.searchParams.set('year', String(y)); window.history.pushState({}, '', url); } }`}
       >
         {/* Year tabs */}
         <div class="flex flex-wrap gap-1">
@@ -168,7 +168,7 @@ export async function eventsListHandler(c: Context): Promise<Response> {
             <button
               type="button"
               class={`px-3 py-1.5 text-sm rounded-md transition-colors`}
-              x-on:click={`activeYear = '${y}'`}
+              x-on:click={`setYear('${y}')`}
               x-bind:class={`activeYear === '${y}' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted'`}
             >
               {y}
@@ -205,7 +205,7 @@ export async function eventsListHandler(c: Context): Promise<Response> {
                         </h3>
                         <div class="flex flex-col gap-3">
                           {visible.map((item) => (
-                            <IncidentCard
+                            <CollapsibleIncidentCard
                               item={item}
                               prefix={prefix}
                             />
@@ -256,7 +256,7 @@ export async function eventsMonthHandler(c: Context): Promise<Response> {
   const parsed = parseYearMonthSlug(yearMonth);
   if (!parsed) {
     return c.html(
-      pageShell(page as Record<string, unknown>, prefix,
+      pageShell(page as Record<string, unknown>, prefix, slug,
         <div class="flex flex-col items-center justify-center py-12 text-center">
           <h2 class="text-lg font-semibold">Invalid month</h2>
           <p class="text-muted-foreground">
@@ -312,7 +312,7 @@ export async function eventsMonthHandler(c: Context): Promise<Response> {
   ].sort((a, b) => b.date.getTime() - a.date.getTime());
 
   return c.html(
-    pageShell(page as Record<string, unknown>, prefix,
+    pageShell(page as Record<string, unknown>, prefix, slug,
       <div class="flex flex-col gap-6">
         <div class="flex w-full flex-row items-center justify-between gap-2 py-0.5">
           <a
@@ -339,7 +339,7 @@ export async function eventsMonthHandler(c: Context): Promise<Response> {
         {items.length > 0 ? (
           <div class="flex flex-col gap-3">
             {items.map((item) => (
-              <IncidentCard item={item} prefix={prefix} />
+              <CollapsibleIncidentCard item={item} prefix={prefix} />
             ))}
           </div>
         ) : (
@@ -386,7 +386,7 @@ export async function reportDetailHandler(c: Context): Promise<Response> {
 
   if (!report) {
     return c.html(
-      pageShell(page as Record<string, unknown>, prefix,
+      pageShell(page as Record<string, unknown>, prefix, slug,
         <div class="flex flex-col items-center justify-center py-12 text-center">
           <h2 class="text-lg font-semibold">Report not found</h2>
           <p class="text-muted-foreground">
@@ -398,10 +398,11 @@ export async function reportDetailHandler(c: Context): Promise<Response> {
   }
 
   return c.html(
-    pageShell(page as Record<string, unknown>, prefix,
+    pageShell(page as Record<string, unknown>, prefix, slug,
       <ReportDetailView
         report={report as unknown as import("../components/incident-detail").ReportDetail}
         prefix={prefix}
+        url={c.req.url}
       />,
     ),
   );
@@ -439,7 +440,7 @@ export async function maintenanceDetailHandler(c: Context): Promise<Response> {
 
   if (!maintenance) {
     return c.html(
-      pageShell(page as Record<string, unknown>, prefix,
+      pageShell(page as Record<string, unknown>, prefix, slug,
         <div class="flex flex-col items-center justify-center py-12 text-center">
           <h2 class="text-lg font-semibold">Maintenance not found</h2>
           <p class="text-muted-foreground">
@@ -451,66 +452,16 @@ export async function maintenanceDetailHandler(c: Context): Promise<Response> {
   }
 
   return c.html(
-    pageShell(page as Record<string, unknown>, prefix,
+    pageShell(page as Record<string, unknown>, prefix, slug,
       <MaintenanceDetailView
         maintenance={maintenance as unknown as import("../components/incident-detail").MaintenanceDetail}
         prefix={prefix}
+        url={c.req.url}
       />,
     ),
   );
 }
 
-// ── Shared: Incident card for list views ────────────────────────────────────
-
-const IncidentCard: FC<{
-  item: MergedItem;
-  prefix: string;
-}> = ({ item, prefix }) => {
-  const href =
-    item.kind === "report"
-      ? `${prefix}/events/report/${item.id}`
-      : `${prefix}/events/maintenance/${item.id}`;
-
-  return (
-    <a
-      href={href}
-      class="flex items-start gap-3 py-3 rounded-lg hover:bg-muted/50 transition-colors -mx-2 px-2 group"
-    >
-      <div class="text-xs text-muted-foreground whitespace-nowrap min-w-[80px] pt-0.5">
-        {formatDate(item.date)}
-      </div>
-      <div class="flex-1 min-w-0">
-        <div class="flex items-center gap-2">
-          <span class="text-sm font-medium truncate group-hover:text-foreground">
-            {item.title}
-          </span>
-        </div>
-        {item.affected.length > 0 ? (
-          <div class="flex flex-wrap gap-1 mt-1">
-            {item.affected.map((name) => (
-              <span class="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                {name}
-              </span>
-            ))}
-          </div>
-        ) : null}
-      </div>
-      <div class="text-muted-foreground group-hover:text-foreground pt-0.5">
-        <svg
-          class="w-4 h-4"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <path d="M5 12h14" />
-          <path d="m12 5 7 7-7 7" />
-        </svg>
-      </div>
-    </a>
-  );
-};
+// ── Exports ─────────────────────────────────────────────────────────────────
 
 export { fetchPage, pageShell };

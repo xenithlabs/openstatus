@@ -35,7 +35,8 @@ describe("GET /:domain/:locale — Home page", () => {
     const res = await requestApp("/test-page/en");
     const html = await res.text();
     expect(html).toContain("x-data");
-    expect(html).toContain('class="fixed bottom-4 right-4 z-50"');
+    // Footer now provides inline theme toggle instead of floating button
+    expect(html).toContain('aria-label="Toggle theme"');
   });
 });
 

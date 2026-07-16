@@ -1,6 +1,6 @@
 import type { Context } from "hono";
 
-import { formatDate } from "../lib/date";
+import { cacheHeaders, CacheTTL } from "../lib/cache";
 import { getPrefix } from "../lib/prefix";
 import { trpc } from "../lib/trpc";
 
@@ -60,9 +60,9 @@ export async function feedHandler(c: Context): Promise<Response> {
       )[0];
 
     const date = latestUpdate
-      ? new Date(latestUpdate.date as string)
+      ? new Date(latestUpdate.date as unknown as string)
       : report.createdAt
-        ? new Date(report.createdAt as string)
+        ? new Date(report.createdAt as unknown as string)
         : new Date();
 
     const desc = latestUpdate
@@ -82,7 +82,7 @@ export async function feedHandler(c: Context): Promise<Response> {
     items.push({
       title: escapeXml(m.title as string),
       link: `${baseUrl}${prefix}/events/maintenance/${m.id}`,
-      pubDate: new Date(m.from as string).toUTCString(),
+      pubDate: new Date(m.from as unknown as string).toUTCString(),
       description: escapeXml((m.message as string) ?? (m.title as string)),
     });
   }
@@ -118,6 +118,128 @@ export async function feedHandler(c: Context): Promise<Response> {
 
   return c.body(rss, 200, {
     "Content-Type": "application/rss+xml; charset=utf-8",
-    "Cache-Control": "public, max-age=300",
+    ...cacheHeaders(CacheTTL.FEED),
+  });
+}
+
+// ── JSON Feed ───────────────────────────────────────────────────────────────
+
+export async function jsonFeedHandler(c: Context): Promise<Response> {
+  const slug = c.get("slug");
+  const prefix = getPrefix(c);
+  const url = new URL(c.req.url);
+  const baseUrl = `${url.protocol}//${url.host}`;
+
+  let page;
+  try {
+    page = await trpc.statusPage.get.query({ slug });
+  } catch {
+    return c.body("Service unavailable", 503);
+  }
+
+  if (!page) return c.notFound();
+
+  const items: Array<Record<string, unknown>> = [];
+
+  for (const report of page.statusReports ?? []) {
+    items.push({
+      id: `${baseUrl}${prefix}/events/report/${report.id}`,
+      url: `${baseUrl}${prefix}/events/report/${report.id}`,
+      title: report.title,
+      content_text: report.title,
+      date_published: new Date(
+        report.createdAt as unknown as string
+      ).toISOString(),
+    });
+  }
+
+  for (const m of page.maintenances ?? []) {
+    items.push({
+      id: `${baseUrl}${prefix}/events/maintenance/${m.id}`,
+      url: `${baseUrl}${prefix}/events/maintenance/${m.id}`,
+      title: m.title,
+      content_text: (m.message as string) ?? (m.title as string),
+      date_published: new Date(m.from as unknown as string).toISOString(),
+    });
+  }
+
+  items.sort(
+    (a, b) =>
+      new Date(b.date_published as string).getTime() -
+      new Date(a.date_published as string).getTime(),
+  );
+
+  const feed = {
+    version: "https://jsonfeed.org/version/1.1",
+    title: page.title,
+    home_page_url: `${baseUrl}${prefix}`,
+    feed_url: `${baseUrl}${prefix}/feed/json`,
+    items,
+  };
+
+  return c.json(feed, 200, cacheHeaders(CacheTTL.FEED));
+}
+
+// ── Atom Feed ───────────────────────────────────────────────────────────────
+
+export async function atomFeedHandler(c: Context): Promise<Response> {
+  const slug = c.get("slug");
+  const prefix = getPrefix(c);
+  const url = new URL(c.req.url);
+  const baseUrl = `${url.protocol}//${url.host}`;
+
+  let page;
+  try {
+    page = await trpc.statusPage.get.query({ slug });
+  } catch {
+    return c.body("Service unavailable", 503);
+  }
+
+  if (!page) return c.notFound();
+
+  const title = escapeXml(page.title);
+  const updated = new Date().toISOString();
+
+  const entries: string[] = [];
+
+  for (const report of page.statusReports ?? []) {
+    const link = `${baseUrl}${prefix}/events/report/${report.id}`;
+    const pubDate = new Date(report.createdAt as unknown as string).toISOString();
+    entries.push(`
+    <entry>
+      <title>${escapeXml(report.title as string)}</title>
+      <link href="${escapeXml(link)}"/>
+      <id>${escapeXml(link)}</id>
+      <updated>${pubDate}</updated>
+      <content type="text">${escapeXml(report.title as string)}</content>
+    </entry>`);
+  }
+
+  for (const m of page.maintenances ?? []) {
+    const link = `${baseUrl}${prefix}/events/maintenance/${m.id}`;
+    const pubDate = new Date(m.from as unknown as string).toISOString();
+    entries.push(`
+    <entry>
+      <title>${escapeXml(m.title as string)}</title>
+      <link href="${escapeXml(link)}"/>
+      <id>${escapeXml(link)}</id>
+      <updated>${pubDate}</updated>
+      <content type="text">${escapeXml((m.message as string) ?? (m.title as string))}</content>
+    </entry>`);
+  }
+
+  const atom = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>${title}</title>
+  <link href="${escapeXml(baseUrl + prefix + "/feed/atom")}" rel="self"/>
+  <link href="${escapeXml(baseUrl + prefix)}"/>
+  <updated>${updated}</updated>
+  <id>${escapeXml(baseUrl + prefix)}</id>
+  ${entries.join("")}
+</feed>`;
+
+  return c.body(atom, 200, {
+    "Content-Type": "application/atom+xml; charset=utf-8",
+    ...cacheHeaders(CacheTTL.FEED),
   });
 }

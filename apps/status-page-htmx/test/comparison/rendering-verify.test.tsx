@@ -7,11 +7,12 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { jsx } from "hono/jsx";
 import { renderToString } from "hono/jsx/dom/server";
 
 import { BarChart } from "../../src/components/bar-chart";
+import { CollapsibleIncidentCard } from "../../src/components/incident-card";
 import { ComponentRow } from "../../src/components/component-row";
+import { CopyLink } from "../../src/components/copy-link";
 import { Header } from "../../src/components/header";
 import { StatusDot } from "../../src/components/icons";
 import { IncidentHistory } from "../../src/components/incident-history";
@@ -155,7 +156,7 @@ const mockUptime = [
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-function renderToHtml(element: JSX.Element): string {
+function renderToHtml(element: any): string {
   // Hono JSX dom/server renderToString
   const html = renderToString(element);
   // Collapse whitespace for assertions
@@ -225,32 +226,44 @@ describe("Header component", () => {
       <Header title="Test" icon={null} prefix="/test/en" />,
     );
     expect(html).toContain("Subscribe to updates");
-    expect(html).toContain('href="/test/en/subscribe"');
+    // Popover trigger is a button, not an <a> link
+    expect(html).toContain('x-on:click="open = !open"');
+    // x-data uses HTML-encoded single quotes
+    expect(html).toContain("activeTab: &#39;Email&#39;");
   });
 });
 
 describe("StatusBanner component", () => {
   test("renders success banner", () => {
-    const html = renderToHtml(<StatusBanner status="success" />);
+    const html = renderToHtml(<StatusBanner status="success" events={[]} prefix="/test/en" />);
     expect(html).toContain("fully operational");
   });
 
   test("renders degraded banner with incident name", () => {
     const html = renderToHtml(
-      <StatusBanner status="degraded" activeIncidentName="Slow API" />,
+      <StatusBanner
+        status="degraded"
+        events={[{ id: 1, type: "incident" as const, name: "Slow API", status: "degraded" }]}
+        prefix="/test/en"
+      />,
     );
-    expect(html).toContain("degraded performance");
     expect(html).toContain("Slow API");
   });
 
   test("renders error banner", () => {
-    const html = renderToHtml(<StatusBanner status="error" />);
+    const html = renderToHtml(<StatusBanner status="error" events={[]} prefix="/test/en" />);
     expect(html).toContain("experiencing an outage");
   });
 
   test("renders maintenance banner", () => {
-    const html = renderToHtml(<StatusBanner status="info" />);
-    expect(html).toContain("Maintenance in progress");
+    const html = renderToHtml(
+      <StatusBanner
+        status="info"
+        events={[{ id: 1, type: "maintenance" as const, name: "Scheduled maintenance", status: "info" }]}
+        prefix="/test/en"
+      />,
+    );
+    expect(html).toContain("Scheduled maintenance");
   });
 });
 
@@ -306,8 +319,8 @@ describe("ComponentRow", () => {
       />,
     );
     expect(html).toContain("100%");
-    // Compact mode shouldn't have the "uptime" label
-    expect(html).not.toContain("uptime");
+    // Compact mode: no StatusBar rendered
+    expect(html).not.toContain("x-data");
   });
 });
 
@@ -332,7 +345,6 @@ describe("SystemStatus component", () => {
     expect(html).toContain("CDN");
     expect(html).toContain("x-data");
     expect(html).toContain("x-show");
-    expect(html).toContain("x-collapse");
   });
 
   test("hides component list when empty", () => {
@@ -421,6 +433,7 @@ describe("IncidentDetail components", () => {
           ],
         }}
         prefix="/test/en"
+        url="https://example.com/test/en/events/report/1"
       />,
     );
 
@@ -449,6 +462,7 @@ describe("IncidentDetail components", () => {
           ],
         }}
         prefix="/test/en"
+        url="https://example.com/test/en/events/maintenance/1"
       />,
     );
 
@@ -489,6 +503,185 @@ describe("ThemeToggle component", () => {
   });
 });
 
+describe("CollapsibleIncidentCard component", () => {
+  const mockReportItem = {
+    kind: "report" as const,
+    item: {
+      id: 1,
+      title: "API Outage",
+      status: "resolved",
+      statusReportUpdates: [
+        {
+          id: 1,
+          status: "investigating",
+          date: "2026-07-14T10:00:00Z",
+          message: "Investigating elevated error rates.",
+        },
+        {
+          id: 2,
+          status: "resolved",
+          date: "2026-07-14T12:00:00Z",
+          message: "Incident resolved.",
+        },
+      ],
+    },
+    date: new Date("2026-07-14"),
+    id: 1,
+    title: "API Outage",
+    affected: ["API", "Dashboard"],
+  };
+
+  test("renders header with date, title, and affected components", () => {
+    const html = renderToHtml(
+      <CollapsibleIncidentCard item={mockReportItem} prefix="/test/en" />,
+    );
+    expect(html).toContain("API Outage");
+    expect(html).toContain("API");
+    expect(html).toContain("Dashboard");
+    expect(html).toContain('/test/en/events/report/1');
+    expect(html).toContain("Jul 14");
+  });
+
+  test("renders Alpine x-data for collapsible toggle", () => {
+    const html = renderToHtml(
+      <CollapsibleIncidentCard item={mockReportItem} prefix="/test/en" />,
+    );
+    expect(html).toContain('x-data="{ open: false }"');
+    expect(html).toContain('x-show="open"');
+    expect(html).toContain("Toggle details");
+  });
+
+  test("renders report timeline with status dots", () => {
+    const html = renderToHtml(
+      <CollapsibleIncidentCard item={mockReportItem} prefix="/test/en" />,
+    );
+    expect(html).toContain("Investigating");
+    expect(html).toContain("elevated error rates");
+    expect(html).toContain("Resolved");
+    expect(html).toContain("Incident resolved");
+  });
+
+  test("renders maintenance timeline with schedule", () => {
+    const mockMaintenanceItem = {
+      kind: "maintenance" as const,
+      item: {
+        id: 2,
+        title: "DB Upgrade",
+        message: "Upgrading database.",
+        from: "2026-07-13",
+        to: "2026-07-13",
+      },
+      date: new Date("2026-07-13"),
+      id: 2,
+      title: "DB Upgrade",
+      affected: [],
+    };
+
+    const html = renderToHtml(
+      <CollapsibleIncidentCard item={mockMaintenanceItem} prefix="/test/en" />,
+    );
+    expect(html).toContain("DB Upgrade");
+    expect(html).toContain("Upgrading database");
+    expect(html).toContain('/test/en/events/maintenance/2');
+  });
+});
+
+describe("CopyLink component", () => {
+  test("renders clipboard button with text", () => {
+    const html = renderToHtml(
+      <CopyLink url="https://example.com/events/report/1" />,
+    );
+    expect(html).toContain("Copy link");
+    expect(html).toContain('aria-label="Copy link"');
+    expect(html).toContain("navigator.clipboard.writeText");
+  });
+
+  test("shows Copied feedback state", () => {
+    const html = renderToHtml(
+      <CopyLink url="https://example.com/events" />,
+    );
+    expect(html).toContain("Copied!");
+    expect(html).toContain('x-show="copied"');
+    expect(html).toContain('x-show="!copied"');
+    expect(html).toContain("setTimeout");
+  });
+});
+
+describe("ReportDetailView with CopyLink", () => {
+  test("includes CopyLink next to back button", () => {
+    const html = renderToHtml(
+      <ReportDetailView
+        report={{
+          id: 1,
+          title: "Test Incident",
+          status: "resolved",
+          createdAt: new Date("2026-07-14"),
+          statusReportUpdates: [
+            {
+              id: 1,
+              status: "resolved",
+              date: new Date("2026-07-14"),
+              message: "**Fixed** — the issue has been resolved.",
+            },
+          ],
+          statusReportsToPageComponents: [],
+        }}
+        prefix="/test/en"
+        url="https://example.com/test/en/events/report/1"
+      />,
+    );
+    expect(html).toContain("Copy link");
+    expect(html).toContain("Back");
+  });
+
+  test("renders markdown in update messages", () => {
+    const html = renderToHtml(
+      <ReportDetailView
+        report={{
+          id: 1,
+          title: "Test Incident",
+          status: "resolved",
+          createdAt: new Date("2026-07-14"),
+          statusReportUpdates: [
+            {
+              id: 1,
+              status: "resolved",
+              date: new Date("2026-07-14"),
+              message: "**Bold** and [link](https://example.com)",
+            },
+          ],
+          statusReportsToPageComponents: [],
+        }}
+        prefix="/test/en"
+        url="https://example.com"
+      />,
+    );
+    expect(html).toContain("<strong>Bold</strong>");
+    expect(html).toContain('href="https://example.com"');
+  });
+});
+
+describe("MaintenanceDetailView with CopyLink", () => {
+  test("includes CopyLink next to back button", () => {
+    const html = renderToHtml(
+      <MaintenanceDetailView
+        maintenance={{
+          id: 1,
+          title: "Maintenance",
+          message: "Scheduled maintenance.",
+          from: new Date("2026-07-13"),
+          to: new Date("2026-07-14"),
+          maintenancesToPageComponents: [],
+        }}
+        prefix="/test/en"
+        url="https://example.com/test/en/events/maintenance/1"
+      />,
+    );
+    expect(html).toContain("Copy link");
+    expect(html).toContain("Back");
+  });
+});
+
 describe("Full page integration", () => {
   test("status dot renders with correct color", () => {
     const success = renderToHtml(<StatusDot status="success" />);
@@ -498,7 +691,7 @@ describe("Full page integration", () => {
     expect(error).toContain("#ef4444");
 
     const degraded = renderToHtml(<StatusDot status="degraded" />);
-    expect(degraded).toContain("#eab308");
+    expect(degraded).toContain("#f97316");
   });
 
   test("full page assembles without errors", () => {
@@ -508,7 +701,8 @@ describe("Full page integration", () => {
         <Header title={mockPage.title} icon={mockPage.icon} prefix="/test/en" />
         <StatusBanner
           status={mockPage.status}
-          activeIncidentName={mockPage.openEvents[0]?.name}
+          events={[{ id: 1, type: "incident" as const, name: mockPage.openEvents[0]?.name ?? "Incident", status: "degraded" }]}
+          prefix="/test/en"
         />
         <SystemStatus
           trackers={mockPage.trackers}

@@ -7,8 +7,11 @@ export const OPENSTATUS_THEME = {
   light: {
     "--background": "oklch(100% 0 0)",
     "--foreground": "oklch(14.5% 0 0)",
+    "--card": "oklch(100% 0 0)",
+    "--card-foreground": "oklch(14.5% 0 0)",
     "--border": "oklch(92.2% 0 0)",
     "--input": "oklch(92.2% 0 0)",
+    "--ring": "oklch(14.5% 0 0 / 15%)",
 
     "--primary": "oklch(20.5% 0 0)",
     "--primary-foreground": "oklch(98.5% 0 0)",
@@ -27,8 +30,11 @@ export const OPENSTATUS_THEME = {
   dark: {
     "--background": "oklch(14.5% 0 0)",
     "--foreground": "oklch(98.5% 0 0)",
+    "--card": "oklch(14.5% 0 0)",
+    "--card-foreground": "oklch(98.5% 0 0)",
     "--border": "oklch(100% 0 0 / 10%)",
     "--input": "oklch(100% 0 0 / 15%)",
+    "--ring": "oklch(100% 0 0 / 15%)",
 
     "--primary": "oklch(92.2% 0 0)",
     "--primary-foreground": "oklch(20.5% 0 0)",

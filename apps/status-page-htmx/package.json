@@ -11,11 +11,14 @@
     "tsc": "tsc --noEmit"
   },
   "dependencies": {
+    "@hono/trpc-server": "catalog:",
     "@openstatus/api": "workspace:*",
     "@openstatus/theme-store": "workspace:*",
     "@trpc/client": "catalog:",
+    "@trpc/server": "catalog:",
     "date-fns": "catalog:",
     "hono": "catalog:",
+    "marked": "^18.0.6",
     "superjson": "catalog:",
     "zod": "catalog:"
   },

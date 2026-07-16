@@ -34,9 +34,10 @@ export async function subscribePageHandler(c: Context): Promise<Response> {
       }}
     >
       <Header
-        title={page?.title ?? slug}
+        title={page?.title ?? slug ?? "Status"}
         icon={page?.icon ?? null}
         prefix={prefix}
+        slug={slug}
       />
       <div class="flex flex-col gap-6 mt-4">
         <SubscribeForm prefix={prefix} />
@@ -77,7 +78,7 @@ export async function subscribePostHandler(c: Context): Promise<Response> {
   const parsed = subscribeSchema.safeParse({ email: body.email });
   if (!parsed.success) {
     return c.html(
-      <SubscribeError message={parsed.error.errors[0]?.message ?? "Invalid email"} />,
+      <SubscribeError message={parsed.error.issues[0]?.message ?? "Invalid email"} />,
       400,
     );
   }

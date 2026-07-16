@@ -50,6 +50,7 @@ catalog:
   "@google-cloud/tasks": 4.0.1
   "@hono/mcp": 0.2.5
   "@hono/sentry": 1.2.2
+  "@hono/trpc-server": 0.4.2
   "@hono/zod-openapi": 1.4.0
   "@hono/zod-validator": 0.8.0
   "@hookform/devtools": 4.4.0

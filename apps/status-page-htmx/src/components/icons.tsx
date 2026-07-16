@@ -1,10 +1,11 @@
 import type { FC } from "hono/jsx";
 
 export const statusColors: Record<string, string> = {
-  success: "#22c55e",
-  degraded: "#eab308",
-  error: "#ef4444",
-  info: "#3b82f6",
+  success: "#24c19a",
+  degraded: "#fbbf24",
+  error: "#f87171",
+  info: "#3c82f6",
+  empty: "#6b7280",
 };
 
 export const StatusDot: FC<{

@@ -29,7 +29,7 @@ const zone = new Hono<{ Variables: Variables & { prefix: string } }>();
 // ── Locale validation middleware ─────────────────────────────────────────────
 
 zone.use("*", async (c, next) => {
-  const { locale } = c.req.param();
+  const locale = c.req.param("locale");
 
   // Only "en" is supported for v1
   if (locale !== "en") {
@@ -37,7 +37,7 @@ zone.use("*", async (c, next) => {
   }
 
   // Build prefix for link generation (e.g. "/test-page/en")
-  const { domain } = c.req.param();
+  const domain = c.req.param("domain");
   c.set("prefix", `/${domain}/${locale}`);
 
   await next();

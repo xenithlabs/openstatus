@@ -226,5 +226,5 @@
     "turbo": "2.9.14",
     "typescript": "catalog:"
   },
-  "packageManager": "pnpm@11.2.1"
+  "packageManager": "pnpm@11.13.0"
 }

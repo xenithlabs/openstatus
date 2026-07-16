@@ -2,8 +2,9 @@ import { z } from "zod";
 
 const schema = z.object({
   PORT: z.coerce.number().default(3000),
-  // URL of the tRPC API server (Next.js status-page or apps/server)
-  TRPC_URL: z.string().default("http://localhost:3003/api/trpc"),
+  // URL of the tRPC API server. When "self" (default in production),
+  // serves the tRPC router in-process instead of forwarding to an external API.
+  TRPC_URL: z.string().default("self"),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   // Log level: debug (all traffic), info (default), error (only failures)
   LOG_LEVEL: z.enum(["debug", "info", "error"]).default("info"),

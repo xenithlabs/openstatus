@@ -1,9 +1,13 @@
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
+import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
+import { edgeRouter } from "@openstatus/api/src/edge";
+import { createInnerTRPCContext } from "@openstatus/api/src/trpc";
 
 import { Layout } from "./components/layout";
 import { env } from "./env";
-import { domainMiddleware, getValidSubdomain, stripHostPort } from "./lib/domain";
+import { CacheTTL, cacheHeader } from "./lib/cache";
+import { domainMiddleware } from "./lib/domain";
 import { logger } from "./lib/logger";
 import { homePageHandler } from "./routes/status-page";
 import { badgeHandler } from "./routes/badge";
@@ -13,8 +17,8 @@ import {
   maintenanceDetailHandler,
   reportDetailHandler,
 } from "./routes/events";
-import { feedHandler } from "./routes/feed";
-import { monitorsHandler } from "./routes/monitors";
+import { feedHandler, jsonFeedHandler, atomFeedHandler } from "./routes/feed";
+import { monitorsHandler, monitorDetailHandler } from "./routes/monitors";
 import {
   subscribePageHandler,
   subscribePostHandler,
@@ -42,9 +46,42 @@ app.use("*", async (c, next) => {
 
 app.use("*", domainMiddleware);
 
+// ── Cache-Control middleware ────────────────────────────────────────────────
+
+app.use("/badge/*", async (c, next) => {
+  await next();
+  c.res.headers.set("Cache-Control", cacheHeader(CacheTTL.BADGE));
+});
+app.use("/feed/*", async (c, next) => {
+  await next();
+  c.res.headers.set("Cache-Control", cacheHeader(CacheTTL.FEED));
+});
+
 // ── Static assets ───────────────────────────────────────────────────────────
 
 app.use("/static/*", serveStatic({ root: "./" }));
+
+// ── tRPC API endpoint (self-hosted) ───────────────────────────────────────
+
+// When TRPC_URL is "self", serve the tRPC edge router in-process so the
+// status page fetches its own data without depending on an external API.
+if (env.TRPC_URL === "self") {
+  app.all("/api/trpc/edge/*", async (c) => {
+    const res = await fetchRequestHandler({
+      endpoint: "/api/trpc/edge",
+      req: c.req.raw,
+      router: edgeRouter,
+      createContext: () =>
+        createInnerTRPCContext({
+          session: null,
+          workspace: null,
+          user: null,
+        }),
+    });
+    return res;
+  });
+  logger.info("server", "tRPC router mounted in-process at /api/trpc/edge");
+}
 
 // ── Health check ────────────────────────────────────────────────────────────
 
@@ -52,54 +89,18 @@ app.get("/ping", (c) => {
   return c.json({ ping: "pong", service: "status-page-htmx" });
 });
 
-// ── Locale-aware context helper ────────────────────────────────────────────
+// ── llms.txt ──────────────────────────────────────────────────────────────
 
-/**
- * Sets up locale-aware context for a route handler.
- * When the URL has `/:domain/:locale`, uses those params.
- * When accessed via custom domain (root path or no locale), defaults to the
- * resolved slug + "en" locale — no browser redirect needed.
- */
-function withContext(
-  c: import("hono").Context,
-): { slug: string; locale: string; prefix: string } | { error: Response } {
-  const domain = c.req.param("domain");
-  const locale = c.req.param("locale");
-
-  // Priority 1: PAGE_SLUG env var (overrides everything)
-  const slug = c.get("slug");
-
-  if (!slug) {
-    return {
-      error: c.html(
-        <Layout page={{ title: "OpenStatus" }}>
-          <div class="flex flex-col items-center justify-center gap-4 py-24 text-center">
-            <h1 class="text-2xl font-bold">Status Page</h1>
-            <p class="text-muted-foreground max-w-md">
-              Visit a specific status page URL or configure a custom domain.
-            </p>
-          </div>
-        </Layout>,
-      ),
-    };
-  }
-
-  // Locale: from URL param, or default "en"
-  const resolvedLocale = (locale && locale === "en") ? "en" : "en";
-
-  // If an explicit locale was provided and it's not "en", reject it
-  if (locale && locale !== "en") {
-    return {
-      error: c.notFound(),
-    };
-  }
-
-  // Build prefix for links. For custom-domain access (no domain in path),
-  // link prefix is empty so URLs stay relative to the current domain.
-  const prefix = domain ? `/${domain}/${resolvedLocale}` : `/${slug}/${resolvedLocale}`;
-
-  return { slug, locale: resolvedLocale, prefix };
-}
+app.get("/llms.txt", (c) => {
+  const slug = c.get("slug") ?? "status";
+  return c.text(
+    `# ${slug} Status Page\n\n` +
+    `This is the status page for ${slug}.\n` +
+    `Visit the home page for current system status, incident history, and monitor uptime.\n`,
+    200,
+    { "Content-Type": "text/plain; charset=utf-8" },
+  );
+});
 
 // ── Route mapping table ────────────────────────────────────────────────────
 
@@ -118,8 +119,11 @@ const routes: Array<{
   { method: "GET",  subPath: "/subscribe",                  handler: subscribePageHandler },
   { method: "POST", subPath: "/subscribe",                  handler: subscribePostHandler },
   { method: "GET",  subPath: "/monitors",                   handler: monitorsHandler },
+  { method: "GET",  subPath: "/monitors/:id",               handler: monitorDetailHandler },
   { method: "GET",  subPath: "/badge",                      handler: badgeHandler },
   { method: "GET",  subPath: "/feed",                       handler: feedHandler },
+  { method: "GET",  subPath: "/feed/json",                  handler: jsonFeedHandler },
+  { method: "GET",  subPath: "/feed/atom",                  handler: atomFeedHandler },
 ];
 
 // ── Path-based routes: /:domain/:locale/... ─────────────────────────────────
@@ -127,9 +131,9 @@ const routes: Array<{
 for (const route of routes) {
   const fullPath = `/:domain/:locale${route.subPath === "/" ? "" : route.subPath}`;
   if (route.method === "GET") {
-    app.get(fullPath, (c) => route.handler(c));
+    app.get(fullPath, async (c) => route.handler(c));
   } else {
-    app.post(fullPath, (c) => route.handler(c));
+    app.post(fullPath, async (c) => route.handler(c));
   }
 }
 
@@ -141,12 +145,12 @@ for (const route of routes) {
 for (const route of routes) {
   const path = route.subPath === "/" ? "/" : route.subPath;
   if (route.method === "GET") {
-    app.get(path, (c) => {
-      if (c.req.param("domain")) return route.handler(c); // handled by path route above
+    app.get(path, async (c) => {
+      if (c.req.param("domain")) return route.handler(c);
       return route.handler(c);
     });
   } else {
-    app.post(path, (c) => {
+    app.post(path, async (c) => {
       if (c.req.param("domain")) return route.handler(c);
       return route.handler(c);
     });

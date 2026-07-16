@@ -1,13 +1,14 @@
 import type { Context } from "hono";
 
 import { Header } from "../components/header";
-import {
-  IncidentHistory,
-  type HistoryMaintenance,
-  type HistoryReport,
-} from "../components/incident-history";
 import { Layout } from "../components/layout";
-import { StatusBanner } from "../components/status-banner";
+import { StatusBanner, type BannerEvent } from "../components/status-banner";
+import type { DayEvent } from "../components/status-bar";
+import {
+  StatusFeed,
+  type FeedReport,
+  type FeedMaintenance,
+} from "../components/status-feed";
 import {
   SystemStatus,
   type ComponentUptime,
@@ -56,12 +57,21 @@ export async function homePageHandler(c: Context): Promise<Response> {
   let uptimeResult: Awaited<ReturnType<typeof trpc.statusPage.getUptime.query>> | null = null;
   let uptimeLoading = true;
 
+  // Match Next.js defaults: cardType=requests, barType=dominant
+  // Page configuration can override via configuration.type / configuration.value
+  // History days: respects the dashboard's "History" setting (defaults to 90).
+  const cardType = (page.configuration?.value as string) ?? "requests";
+  const barType = (page.configuration?.type as string) ?? "dominant";
+  const historyDays = (page.configuration?.days as number) ?? 90;
+
   if (componentIds.length > 0) {
     try {
       uptimeResult = await trpc.statusPage.getUptime.query({
         slug,
         pageComponentIds: componentIds,
-        days: 90,
+        cardType: cardType as "requests" | "duration" | "dominant" | "manual",
+        barType: barType as "absolute" | "dominant" | "manual",
+        days: historyDays as 30 | 45 | 90 | undefined,
       });
       uptimeLoading = false;
     } catch (err) {
@@ -75,7 +85,7 @@ export async function homePageHandler(c: Context): Promise<Response> {
   // ── Prepare component uptime lookups ─────────────────────────────────
   const componentUptime: ComponentUptime[] = (uptimeResult ?? []).map((u) => ({
     pageComponentId: u.pageComponentId,
-    data: u.data as ComponentUptime["data"],
+    data: u.data as unknown as ComponentUptime["data"],
     uptime: u.uptime,
   }));
 
@@ -97,23 +107,238 @@ export async function homePageHandler(c: Context): Promise<Response> {
           : null;
       return {
         groupId: group.groupId.toString(),
-        data: members[0]?.data as GroupUptime["data"],
+        data: members[0]?.data as unknown as GroupUptime["data"],
         uptime: avgUptime,
       };
     });
 
-  // ── Determine active incident name for banner ─────────────────────────
-  const activeIncident = page.openEvents.find((e) => e.type === "incident");
-  const activeIncidentName = activeIncident?.name ?? null;
-  const bannerStatus = page.status as "success" | "degraded" | "error" | "info";
+  // ── Build banner events from open events ────────────────────────────
+  // Build a monitor lookup for degraded classification
+  const monitorByIncidentId = new Map<number, Record<string, unknown>>();
+  for (const pc of page.pageComponents) {
+    for (const inc of (pc.monitor?.incidents as Array<Record<string, unknown>> | undefined) ?? []) {
+      if (!monitorByIncidentId.has(inc.id as number)) {
+        monitorByIncidentId.set(inc.id as number, pc.monitor as Record<string, unknown>);
+      }
+    }
+  }
 
-  // Determine if "fully operational" banner should show
+  const bannerEvents: BannerEvent[] = [];
+  for (const evt of page.openEvents) {
+    if (evt.type === "incident") {
+      // API hardcodes incident name as "Downtime". Derive the label from
+      // the monitor config instead, matching the bar chart tooltip logic.
+      const mon = monitorByIncidentId.get(evt.id);
+      const monStatus = (mon?.status as string) ?? "";
+      const degradedTriggers = (mon?.degradedTriggersIncident as boolean) ?? false;
+      const hasDegradedThreshold = (mon?.degradedAfter as number) != null;
+      const isDegraded = monStatus === "degraded" || degradedTriggers || hasDegradedThreshold;
+      bannerEvents.push({
+        id: evt.id,
+        type: "incident",
+        name: isDegraded ? "Degraded" : "Downtime",
+        status: (isDegraded ? "degraded" : "error") as BannerEvent["status"],
+      });
+    } else if (evt.type === "report") {
+      const report = page.statusReports.find((r: Record<string, unknown>) => r.id === evt.id);
+      if (!report) continue;
+      const updates = ((report.statusReportUpdates as Array<Record<string, unknown>>) ?? [])
+        .slice()
+        .sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
+          new Date(b.date as string).getTime() - new Date(a.date as string).getTime(),
+        );
+      const latest = updates[0];
+      bannerEvents.push({
+        id: evt.id,
+        type: "report",
+        name: evt.name,
+        status: evt.status as BannerEvent["status"],
+        message: (latest?.message as string) ?? null,
+        affected:
+          (report.statusReportsToPageComponents as Array<{ pageComponent: { name: string } }> | undefined)?.map(
+            (a) => a.pageComponent.name,
+          ) ?? [],
+        href: `${prefix}/events/report/${evt.id}`,
+      });
+    } else if (evt.type === "maintenance") {
+      const maint = page.maintenances.find((m: Record<string, unknown>) => m.id === evt.id);
+      if (!maint) continue;
+      bannerEvents.push({
+        id: evt.id,
+        type: "maintenance",
+        name: evt.name,
+        status: evt.status as BannerEvent["status"],
+        message: (maint.message as string) ?? null,
+        affected:
+          (maint.maintenancesToPageComponents as Array<{ pageComponent: { name: string } }> | undefined)?.map(
+            (a) => a.pageComponent.name,
+          ) ?? [],
+        href: `${prefix}/events/maintenance/${evt.id}`,
+      });
+    }
+  }
+
+  // Determine banner status color
+  const bannerStatus = page.status as "success" | "degraded" | "error" | "info";
   const actualBannerStatus: typeof bannerStatus =
     page.status === "error" || page.status === "degraded"
       ? page.status
       : page.status === "info"
         ? "info"
         : "success";
+
+  // ── Helper: human-readable duration ─────────────────────────────────
+  function formatDuration(from: Date, to: Date): string {
+    const ms = to.getTime() - from.getTime();
+    if (ms < 60000) return `${Math.round(ms / 1000)} seconds`;
+    if (ms < 3600000) return `${Math.round(ms / 60000)} minutes`;
+    if (ms < 86400000) return `${Math.round(ms / 3600000)} hours`;
+    return `${Math.round(ms / 86400000)} days`;
+  }
+
+  // ── Build bar events for StatusBar hover tooltips ───────────────────
+  const now = Date.now();
+  const barEvents: Record<number, DayEvent[]> = {};
+  const getDayIndex = (date: Date): number =>
+    Math.floor((now - date.getTime()) / 86400000);
+
+  for (const report of page.statusReports) {
+    if (!report.createdAt) continue;
+    const dayIdx = getDayIndex(new Date(report.createdAt));
+    if (dayIdx >= 0 && dayIdx < 90) {
+      const updates = (report.statusReportUpdates as Array<Record<string, unknown>> | undefined) ?? [];
+      const sortedUpdates = updates
+        .slice()
+        .sort((a, b) => new Date(b.date as string).getTime() - new Date(a.date as string).getTime());
+      const lastUpdate = sortedUpdates[0];
+      const endAt = lastUpdate?.date as string | undefined;
+      const startAtDate = new Date(report.createdAt);
+      const endAtDate = endAt ? new Date(endAt) : undefined;
+      (barEvents[dayIdx] ??= []).push({
+        id: report.id,
+        type: "report",
+        name: report.title,
+        status: (report.status as DayEvent["status"]) ?? "info",
+        href: `${prefix}/events/report/${report.id}`,
+        startAt: (report.createdAt as unknown as string) ?? report.createdAt.toString(),
+        endAt: endAt,
+        duration: endAtDate ? formatDuration(startAtDate, endAtDate) : undefined,
+      });
+    }
+  }
+  for (const maint of page.maintenances) {
+    const dayIdx = getDayIndex(new Date(maint.from));
+    if (dayIdx >= 0 && dayIdx < 90) {
+      const maintFrom = (maint.from as unknown as string) ?? String(maint.from);
+      const maintTo = (maint as Record<string, unknown>).to as string | undefined;
+      (barEvents[dayIdx] ??= []).push({
+        id: maint.id,
+        type: "maintenance",
+        name: maint.title,
+        status: ("status" in maint ? (maint as Record<string, unknown>).status : "info") as DayEvent["status"],
+        href: `${prefix}/events/maintenance/${maint.id}`,
+        startAt: maintFrom,
+        endAt: maintTo,
+        duration: maintTo ? formatDuration(new Date(maintFrom), new Date(maintTo)) : undefined,
+      });
+    }
+  }
+
+  // Map component monitor incidents to bar events
+  const seenIncidentIds = new Set<number>();
+  for (const pc of page.pageComponents) {
+    const incidents = (pc.monitor?.incidents as Array<Record<string, unknown>> | undefined) ?? [];
+    for (const inc of incidents) {
+      const incId = inc.id as number;
+      if (seenIncidentIds.has(incId)) continue;
+      seenIncidentIds.add(incId);
+      if (!inc.startedAt) continue;
+      const incStartedAt = inc.startedAt as string;
+      const incEndedAt = inc.endedAt as string | undefined;
+      const dayIdx = getDayIndex(new Date(incStartedAt));
+      if (dayIdx >= 0 && dayIdx < 90) {
+        // Auto-created incidents (empty title, status "triage") come from
+        // the checker's degraded/error detection. Use the component's
+        // displayed status (from the page tracker) to determine the label.
+        // The tracker status is already computed as "error", "degraded",
+        // or "success" based on the page's own status logic.
+        const isAutoCreated = !(inc.title as string)?.trim();
+        const monitor = pc.monitor as Record<string, unknown> | undefined;
+        const monitorStatus = (monitor?.status as string) ?? "";
+        const degradedTriggers = (monitor?.degradedTriggersIncident as boolean) ?? false;
+        // An incident is "degraded" when the monitor status is degraded,
+        // degradedTriggersIncident is enabled, or the monitor has a
+        // degradedAfter threshold (meaning degraded detection is configured).
+        const hasDegradedThreshold = (monitor?.degradedAfter as number) != null;
+        const isDegraded = monitorStatus === "degraded" || degradedTriggers || hasDegradedThreshold;
+        (barEvents[dayIdx] ??= []).push({
+          id: incId,
+          type: "incident",
+          name: isAutoCreated
+            ? (isDegraded ? "Degraded" : "Downtime")
+            : ((inc.title as string)?.trim() || "Downtime"),
+          status: isAutoCreated
+            ? (isDegraded ? "degraded" as const : "error" as const)
+            : (((inc.status as string) === "resolved")
+               ? "success" as const
+               : "degraded" as const),
+          startAt: incStartedAt,
+          endAt: incEndedAt,
+          duration: incEndedAt ? formatDuration(new Date(incStartedAt), new Date(incEndedAt)) : undefined,
+        });
+      }
+    }
+  }
+
+  // ── Build StatusFeed data ────────────────────────────────────────────
+  const feedReports: FeedReport[] = page.statusReports
+    .filter((r) =>
+      page.lastEvents.some(
+        (e) => e.id === r.id && e.type === "report",
+      ),
+    )
+    .map((r) => ({
+      id: r.id,
+      title: r.title,
+      status: r.status,
+      affected:
+        r.statusReportsToPageComponents?.map(
+          (c) => c.pageComponent.name,
+        ) ?? [],
+      createdAt: r.createdAt ?? new Date(),
+      message:
+        (r.statusReportUpdates
+          .slice()
+          .sort(
+            (a: Record<string, unknown>, b: Record<string, unknown>) =>
+              new Date(b.date as string).getTime() -
+              new Date(a.date as string).getTime(),
+          )[0]?.message as string) ?? null,
+      updates: r.statusReportUpdates.map((u) => ({
+        id: u.id,
+        status: u.status,
+        date: u.date,
+        message: u.message,
+      })),
+    }));
+
+  const feedMaintenances: FeedMaintenance[] = page.maintenances
+    .filter((m) =>
+      page.lastEvents.some(
+        (e) => e.id === m.id && e.type === "maintenance",
+      ),
+    )
+    .map((m) => ({
+      id: m.id,
+      title: m.title,
+      status: ((m as Record<string, unknown>).status as string) ?? "info",
+      affected:
+        m.maintenancesToPageComponents?.map(
+          (c) => c.pageComponent.name,
+        ) ?? [],
+      from: m.from,
+      message: (m.message as string) ?? null,
+    }));
 
   // ── Render ────────────────────────────────────────────────────────────
   return c.html(
@@ -124,18 +349,22 @@ export async function homePageHandler(c: Context): Promise<Response> {
         icon: page.icon,
         themeKey: page.configuration?.theme,
         forceTheme: page.forceTheme ?? null,
+        slug,
+        updatedAt: new Date(),
       }}
     >
       <Header
         title={page.title}
         icon={page.icon}
         prefix={prefix}
+        slug={slug}
       />
 
       {/* Status Banner */}
       <StatusBanner
         status={actualBannerStatus}
-        activeIncidentName={activeIncidentName}
+        events={bannerEvents}
+        prefix={prefix}
       />
 
       {/* System Status */}
@@ -145,41 +374,14 @@ export async function homePageHandler(c: Context): Promise<Response> {
         groupUptime={groupUptime}
         isLoading={uptimeLoading}
         showUptime={page.configuration?.uptime !== false}
+        barEvents={barEvents}
+        prefix={prefix}
       />
 
-      {/* Incident History */}
-      <IncidentHistory
-        reports={page.statusReports
-          .filter(
-            (report) =>
-              report.statusReportUpdates.length > 0 &&
-              page.lastEvents.some(
-                (event) =>
-                  event.id === report.id && event.type === "report",
-              ),
-          )
-          .map((report) => ({
-            ...report,
-            affected:
-              report.statusReportsToPageComponents?.map(
-                (c) => c.pageComponent.name,
-              ) ?? [],
-          })) as unknown as HistoryReport[]}
-        maintenances={page.maintenances
-          .filter((maintenance) =>
-            page.lastEvents.some(
-              (event) =>
-                event.id === maintenance.id &&
-                event.type === "maintenance",
-            ),
-          )
-          .map((maintenance) => ({
-            ...maintenance,
-            affected:
-              maintenance.maintenancesToPageComponents?.map(
-                (c) => c.pageComponent.name,
-              ) ?? [],
-          })) as unknown as HistoryMaintenance[]}
+      {/* Status Feed */}
+      <StatusFeed
+        reports={feedReports}
+        maintenances={feedMaintenances}
         prefix={prefix}
       />
 

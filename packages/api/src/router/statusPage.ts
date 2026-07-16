@@ -190,12 +190,19 @@ export const statusPageRouter = createTRPCRouter({
               ? "info"
               : "success");
         } else {
-          // Monitor: incidents, reports, and maintenances affect status
-          status =
+          // Monitor: incidents, reports, and maintenances affect status.
+          // When the monitor has degraded detection configured, an open
+          // incident means "degraded" rather than "error" — the checker
+          // may have created the incident from a degraded (not error) check.
+          const hasOpenIncident =
             events.some((e) => e.type === "incident" && !e.to) &&
-            barType !== "manual"
-              ? "error"
-              : (reportStatus ??
+            barType !== "manual";
+          const hasDegradedConfig =
+            (c.monitor?.degradedTriggersIncident as boolean) ||
+            (c.monitor?.degradedAfter as number) != null;
+          status = hasOpenIncident
+            ? (hasDegradedConfig ? "degraded" : "error")
+            : (reportStatus ??
                 (events.some(
                   (e) =>
                     e.type === "maintenance" &&
@@ -222,11 +229,15 @@ export const statusPageRouter = createTRPCRouter({
           reports: _page.statusReports,
           monitorId: c.monitor.id,
         });
-        const status =
+        const hasOpenIncident =
           events.some((e) => e.type === "incident" && !e.to) &&
-          barType !== "manual"
-            ? "error"
-            : (activeReportStatus(events) ??
+          barType !== "manual";
+        const hasDegradedConfig =
+          (c.monitor?.degradedTriggersIncident as boolean) ||
+          (c.monitor?.degradedAfter as number) != null;
+        const status = hasOpenIncident
+          ? (hasDegradedConfig ? "degraded" : "error")
+          : (activeReportStatus(events) ??
               (events.some(
                 (e) =>
                   e.type === "maintenance" &&

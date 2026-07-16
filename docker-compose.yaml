@@ -608,15 +608,13 @@ services:
             - .env.docker
         environment:
             - PORT=3000
-            - TRPC_URL=http://status-page:3000/api/trpc
+            - TRPC_URL=self
             - NODE_ENV=production
             - SELF_HOST=true
             - LOG_LEVEL=debug
         depends_on:
             db-migrate:
                 condition: service_completed_successfully
-            status-page:
-                condition: service_healthy
             libsql:
                 condition: service_healthy
         healthcheck:
@@ -664,7 +662,7 @@ services:
         env_file:
             - .env.docker
         environment:
-            - TRPC_URL=http://status-page:3000/api/trpc
+            - TRPC_URL=self
             - NODE_ENV=test
             - SELF_HOST=true
             - PAGE_SLUG=status

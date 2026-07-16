@@ -1,10 +1,14 @@
 import type { FC } from "hono/jsx";
 
+import { UpdatesPopover } from "./updates-popover";
+
 export interface HeaderProps {
   title: string;
   icon?: string | null;
   /** URL prefix for links. Empty string for custom-domain access (clean URLs). */
   prefix?: string;
+  /** Status page slug, used for the subscribe popover. */
+  slug?: string;
 }
 
 const navLinkClass =
@@ -12,7 +16,7 @@ const navLinkClass =
 
 const activeClass = "bg-accent text-accent-foreground";
 
-export const Header: FC<HeaderProps> = ({ title, icon, prefix = "" }) => {
+export const Header: FC<HeaderProps> = ({ title, icon, prefix = "", slug }) => {
   // Normalize prefix: remove trailing slash
   const p = prefix.replace(/\/$/, "");
 
@@ -48,14 +52,16 @@ export const Header: FC<HeaderProps> = ({ title, icon, prefix = "" }) => {
         </a>
       </nav>
 
-      {/* Subscribe button */}
+      {/* Subscribe popover */}
       <div class="sm:inline-flex items-center space-x-2 shrink-0">
-        <a
-          href={`${p}/subscribe`}
-          class="transition text-sm focus:outline-none px-2.5 py-1.5 rounded-md bg-primary text-primary-foreground hover:bg-primary/90"
-        >
-          Subscribe to updates
-        </a>
+        <UpdatesPopover
+          prefix={p}
+          slug={slug ?? ""}
+          rssUrl={`${p}/feed`}
+          jsonUrl={`${p}/feed/json`}
+          atomUrl={`${p}/feed/atom`}
+          sshCommand={`ssh ${slug ?? "status"}@ssh.openstatus.dev`}
+        />
       </div>
     </header>
   );

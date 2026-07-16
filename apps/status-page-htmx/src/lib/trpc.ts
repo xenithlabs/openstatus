@@ -1,5 +1,6 @@
 import type { AppRouter } from "@openstatus/api";
 import { createTRPCClient, httpLink, loggerLink } from "@trpc/client";
+import type { TRPCClient, OperationResultEnvelope } from "@trpc/client";
 import superjson from "superjson";
 
 import { env } from "@/env";
@@ -20,7 +21,7 @@ function fetchWithTimeout(
   }).finally(() => clearTimeout(timer));
 }
 
-export const trpc = createTRPCClient<AppRouter>({
+export const trpc: TRPCClient<AppRouter> = createTRPCClient<AppRouter>({
   links: [
     // tRPC's built-in logger link — only enabled when LOG_LEVEL=debug
     loggerLink({
@@ -34,8 +35,10 @@ export const trpc = createTRPCClient<AppRouter>({
             { input: opts.input as Record<string, unknown> },
           );
         } else {
-          const duration = opts.result.context?.durationMs;
           const status = opts.result instanceof Error ? "✗" : "✓";
+          const duration = opts.result instanceof Error
+            ? undefined
+            : (opts.result as OperationResultEnvelope<unknown, unknown>).context?.durationMs;
           logger.debug(
             "trpc",
             `${direction} ${opts.path} ${status}`,
@@ -50,7 +53,11 @@ export const trpc = createTRPCClient<AppRouter>({
       },
     }),
     httpLink({
-      url: `${env.TRPC_URL}/edge`,
+      // When TRPC_URL is "self", the tRPC router is served in-process at
+      // /api/trpc/edge. Call localhost directly.
+      url: env.TRPC_URL === "self"
+        ? `http://localhost:${env.PORT}/api/trpc/edge`
+        : `${env.TRPC_URL}/edge`,
       transformer: superjson,
       headers: {
         "x-trpc-source": "server",
